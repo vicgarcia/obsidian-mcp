@@ -1,0 +1,14 @@
+[project]
+name = "obsidian-mcp"
+version = "1.0.0"
+description = "An MCP server for accessing an opinionated take on Obsidian"
+readme = "README.md"
+authors = [
+    { name = "vic Garcia", email = "vic.garcia@outlook.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
