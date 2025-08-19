@@ -2,13 +2,33 @@
 name = "obsidian-mcp"
 version = "1.0.0"
 description = "An MCP server for accessing an opinionated take on Obsidian"
-readme = "README.md"
 authors = [
     { name = "vic Garcia", email = "vic.garcia@outlook.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastmcp>=2.11.3",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-env>=0.8.0",
+]
+
+[project.scripts]
+obsidian-mcp = "obsidian_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = ["-v"]
+env = [
+    "OBSIDIAN_VAULT_PATH = tests/fixtures/vault"
+]
