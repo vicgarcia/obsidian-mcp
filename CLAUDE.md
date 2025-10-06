@@ -2,97 +2,103 @@
 
 ## Project Overview
 
-**Obsidian MCP Server** - A Model Context Protocol (MCP) server that provides Claude Desktop with seamless access to Obsidian vaults. Built using FastMCP Python framework with Docker deployment support.
+This is an MCP server for Obsidian journal management. It's intentionally minimal - built to do one thing well rather than trying to handle every possible Obsidian use case.
 
-## Current Status: ✅ PRODUCTION READY
+The server provides Claude Desktop with access to journal entries organized in a year/month filesystem structure. That's the entire scope.
 
-The project is **complete and fully functional** with:
-- All 8 MCP tools implemented according to PRD specifications
-- Clean architecture with separated concerns (models, utils, business logic)
-- Comprehensive test suite (42 tests, all passing)
-- Docker deployment ready for Claude Desktop integration
-- Timezone-aware date handling for accurate journal entries
-- Zero known issues or TODOs
+## Current Status
 
-## Key Architecture Decisions
+Production ready. 4 tools implemented, all tests passing, Docker deployment configured.
 
-### 1. **Pydantic Models in `models.py`**
-- All input validation models moved from `utils.py` to `models.py`
-- `utils.py` now contains only helper functions
-- Clean separation of concerns
+This is feature-complete by design. The goal was simplicity, not comprehensiveness.
 
-### 2. **Docker-First Deployment**
-- Removed docker-compose (unnecessary complexity)
-- Simple Dockerfile with minimal dependencies
-- User permission handling via `--user` flag in Docker run command
-- No README requirement in pyproject.toml (removed for clean builds)
+## Design Philosophy
 
-### 3. **Test Structure**
-- Focused on end-to-end and core functionality testing
-- No coverage reporting (removed as unnecessary overhead)
-- Fast execution (~1.2 seconds)
-- 42 comprehensive tests covering models, utils, and e2e workflows
+### Why Journal-Only
 
-### 4. **Timezone Support**
-- Timezone-aware datetime handling using `zoneinfo`
-- Docker containers default to `America/New_York` timezone
-- Configurable via `TZ` environment variable
-- Prevents date discrepancies between local and UTC time
+Most Obsidian MCP servers try to expose everything - knowledge bases, projects, tags, templates, etc. That creates complexity and maintenance overhead for features I don't actually use.
 
-### 5. **Removed Features**
-- ❌ Templates functionality (templates.py) - explicitly removed per user request
-- ❌ Docker Compose - simplified to pure Docker
-- ❌ Coverage testing - removed overhead
-- ❌ Native installation docs - Docker-only approach
+I use Obsidian primarily for daily journaling. The daily notes feature combined with a simple filesystem hierarchy (year/month) is all I need. So that's all this server does.
 
-## Project Structure
+### Filesystem Organization
+
+Journal entries are organized as:
+```
+journal/YYYY/MM/YYYY-MM-DD.md
+```
+
+This structure is rigid by design. It keeps things predictable and makes date-based queries straightforward. The MCP tools assume this structure exists.
+
+### Simplicity Over Features
+
+Every removed feature is a decision to keep the codebase maintainable:
+- No templates (don't need them)
+- No knowledge management (separate tools handle this better)
+- No project tracking (not my workflow)
+- No tag support (filesystem is enough)
+- No complex queries (just list and read)
+
+Each removed feature means less code to maintain, fewer edge cases, and faster execution.
+
+## Architecture
+
+### Code Organization
 
 ```
 src/obsidian_mcp/
-├── __init__.py          # Package initialization
-├── server.py           # Main MCP server and general file operations
-├── models.py           # Pydantic models for input validation
-├── utils.py            # Utility functions and helpers
-├── journal.py          # Journal-specific tools
-├── knowledge.py        # Knowledge base tools
-└── projects.py         # Project management tools
+├── server.py    # all MCP tools live here
+├── models.py    # Pydantic input validation
+└── utils.py     # helper functions
 
 tests/
-├── conftest.py         # Test configuration and fixtures
-├── test_utils.py       # Unit tests for utility functions  
-├── test_models.py      # Tests for Pydantic models
-├── test_e2e.py         # End-to-end integration tests
-└── fixtures/vault/     # Test data and vault structure
+├── conftest.py      # pytest fixtures
+├── test_e2e.py      # end-to-end tests
+├── test_models.py   # validation tests
+└── test_utils.py    # utility tests
 ```
 
-## MCP Tools Implemented (8 total)
+Everything is in one server file. No need to split journal/knowledge/projects when there's only journal.
 
-### General File Operations
-- `read_file` - Read file content with security validation
-- `write_file` - Write files with automatic directory creation
+### Key Decisions
 
-### Journal Tools
-- `list_todays_journal_entry` - Get today's journal path
-- `list_journal_entries_by_year_and_month` - List monthly entries
+**Pydantic for validation**: Explicit input models catch bad data early. All path inputs, date formats, and file operations go through validation.
 
-### Knowledge Tools
-- `list_knowledge_topics` - List topic directories
-- `list_topic_content` - List files in topic (recursive)
-- `create_topic` - Create new knowledge topic
+**Docker-first deployment**: Simpler than managing Python environments. User permissions map cleanly through Docker's --user flag.
 
-### Projects Tools
-- `list_projects` - List project directories
-- `list_project_content` - List files in project (recursive)  
-- `create_project` - Create new project directory
+**Timezone awareness**: Journal entries need to respect local time, not UTC. The TZ environment variable handles this.
+
+**No abstraction layers**: Direct path manipulation with pathlib. No ORMs, no query builders, just file operations.
+
+## MCP Tools (4 total)
+
+**General file operations**:
+- `read_file` - read any file in vault
+- `write_file` - write to any file in vault
+
+**Journal operations**:
+- `list_todays_journal_entry` - get path for today
+- `list_journal_entries_by_year_and_month` - list entries for YYYY/MM
+
+That's it. No create/delete/move operations. Read and write cover the journal workflow.
+
+## Code Style
+
+Non-negotiable conventions:
+- Comments in lowercase (except proper names/symbols)
+- Docstrings use triple single quotes: `''' like this '''`
+- Single-line docstrings have spaces: `''' text '''`
+- Files end with blank line
 
 ## Deployment
 
-### Build Docker Image
+Docker only. No native installation docs because Docker handles dependencies and permissions cleanly.
+
+Build:
 ```bash
 ./build.sh
 ```
 
-### Claude Desktop Configuration
+Configure Claude Desktop:
 ```json
 {
   "mcpServers": {
@@ -101,7 +107,7 @@ tests/
       "args": [
         "run", "--rm", "-i",
         "--user", "1000:1000",
-        "-v", "/path/to/your/obsidian/vault:/vault",
+        "-v", "/path/to/vault:/vault",
         "-e", "OBSIDIAN_VAULT_PATH=/vault",
         "-e", "TZ=America/New_York",
         "obsidian-mcp:local"
@@ -111,72 +117,71 @@ tests/
 }
 ```
 
+User must set:
+- Their actual user:group IDs (from `id` command)
+- Absolute vault path
+- Their timezone
+
+## Security
+
+**Path validation**: All file paths validated against vault root using `pathlib.Path.is_relative_to()`. No traversal attacks.
+
+**Input sanitization**: Pydantic models validate formats before any file operations.
+
+**Principle of least privilege**: Docker runs as specified user, not root. File permissions stay correct.
+
 ## Testing
 
-```bash
-# Quick test run
-uv run pytest
+29 tests covering:
+- Input validation (models)
+- Path operations (utils)
+- File operations (e2e)
+- Journal tools (e2e)
 
-# Full test suite
-./run_tests.sh
+Fast execution (< 1 second). No coverage reporting because it's overhead without value for this codebase size.
+
+Run:
+```bash
+uv run pytest
 ```
 
-## Security Features
+## Dependencies
 
-- **Path validation**: All file paths validated against vault root
-- **Directory traversal prevention**: Using `pathlib.Path.is_relative_to()`
-- **Input sanitization**: Comprehensive Pydantic models
-- **Read-before-write**: File modifications require reading current content
-- **User permissions**: Docker runs as specified user for proper file ownership
+Minimal:
+- FastMCP (>= 2.11.3) - MCP framework
+- Pydantic (>= 2.0.0) - validation
+- Python 3.12+ - runtime
 
-## Key Dependencies
+No database, no web framework, no query engines.
 
-- **FastMCP** (>=2.11.3) - MCP server framework
-- **Pydantic** (>=2.0.0) - Input validation
-- **Python** (>=3.12) - Runtime requirement
+## What Was Removed
 
-## Important Notes
+Originally had:
+- Templates system (templates.py)
+- Knowledge base tools (knowledge.py)
+- Project management (projects.py)
+- Docker Compose setup
+- Coverage testing
+- Native installation paths
 
-1. **No templates functionality** - This was explicitly removed and should not be re-added
-2. **Docker-only deployment** - Native installation documentation removed per user preference
-3. **User ID configuration** - Users must set their `--user` flag with correct IDs
-4. **File permissions** - Docker handles permissions naturally when run with correct user
-5. **Environment variables** - `OBSIDIAN_VAULT_PATH` must point to mounted vault directory
-6. **Timezone configuration** - Set `TZ` environment variable to match local timezone for accurate journal dates
-
-## Development Commands
-
-```bash
-# Install dependencies
-uv sync --extra test
-
-# Run tests
-uv run pytest
-
-# Build Docker image
-./build.sh
-
-# Test Docker locally
-docker run --rm --user "$(id -u):$(id -g)" \
-  -v "/path/to/vault:/vault" \
-  -e OBSIDIAN_VAULT_PATH=/vault \
-  -e TZ=America/New_York \
-  obsidian-mcp:local
-```
-
-## User Experience
-
-The server is designed for **seamless integration** with Claude Desktop:
-1. User builds Docker image with `./build.sh`
-2. User adds JSON config to Claude Desktop (with their vault path, user ID, and timezone)
-3. Claude Desktop can immediately access and manage Obsidian vault through MCP tools
-4. File permissions work correctly due to Docker user mapping
-5. Journal entries reflect correct local dates due to timezone configuration
+All removed to keep scope tight. Each removal was deliberate.
 
 ## Context for Future Sessions
 
-- This project is **feature-complete** and **production-ready**
-- Focus should be on **maintenance** and **user support** rather than new features
-- **Docker deployment** is the primary and recommended approach
-- All **architectural decisions** were made deliberately and should be preserved
-- The **test suite** is comprehensive and should be maintained
+- This is feature-complete by design
+- Focus is maintenance and bug fixes, not new features
+- Don't re-add removed functionality without explicit request
+- Architecture decisions were intentional, not accidental
+- Simplicity is the goal, not comprehensiveness
+
+If someone asks to add knowledge management or project tools, the answer is no unless they fork it. This does journal entries, that's the scope.
+
+## Development Workflow
+
+1. Changes go through tests first
+2. Code style rules are non-negotiable
+3. Keep dependencies minimal
+4. Docker is the deployment path
+5. Don't break the 4-tool interface
+
+That's it. Simple project, simple rules.

@@ -1,7 +1,9 @@
-"""Main MCP server implementation for Obsidian vault access."""
+''' Main MCP server implementation for Obsidian vault access. '''
 
+import re
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, List
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
@@ -10,53 +12,52 @@ from .utils import (
     get_vault_base,
     validate_vault_path,
     create_error_response,
-    create_success_response
+    create_success_response,
+    get_today_journal_path,
+    list_files_in_directory
 )
-from .models import FilePathInput, FileWriteInput
-from .journal import register_journal_tools
-from .knowledge import register_knowledge_tools
-from .projects import register_projects_tools
+from .models import FilePathInput, FileWriteInput, YearMonthInput
 
 
-# Initialize the MCP server
+# initialize the MCP server
 mcp = FastMCP("Obsidian MCP Server")
 
 
 @mcp.tool()
 def read_file(file_path: str) -> Dict[str, Any]:
-    """
+    '''
     Read file content from the Obsidian vault.
-    
+
     Args:
         file_path: Vault-relative path to the file
-        
+
     Returns:
         Dictionary with file content or error message
-    """
+    '''
     try:
-        # Validate input
+        # validate input
         validated_input = FilePathInput(file_path=file_path)
-        
-        # Validate and resolve vault path
+
+        # validate and resolve vault path
         vault_path = validate_vault_path(validated_input.file_path)
-        
-        # Check if file exists
+
+        # check if file exists
         if not vault_path.exists():
             return create_error_response(f"File not found: {validated_input.file_path}")
-        
-        # Check if it's actually a file
+
+        # check if it's actually a file
         if not vault_path.is_file():
             return create_error_response(f"Path is not a file: {validated_input.file_path}")
-        
-        # Read file content
+
+        # read file content
         try:
-            # Try to read as text file
+            # try to read as text file
             content = vault_path.read_text(encoding='utf-8')
             return {"content": content}
         except UnicodeDecodeError:
-            # If it's a binary file, return error
+            # if it's a binary file, return error
             return create_error_response(f"Cannot read binary file: {validated_input.file_path}")
-        
+
     except ValidationError as e:
         return create_error_response(f"Invalid input: {e}")
     except ValueError as e:
@@ -67,31 +68,31 @@ def read_file(file_path: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def write_file(file_path: str, content: str) -> Dict[str, Any]:
-    """
+    '''
     Write content to a file in the Obsidian vault.
-    
+
     Args:
         file_path: Vault-relative path to the file
         content: Content to write to the file
-        
+
     Returns:
         Dictionary with success indicator or error message
-    """
+    '''
     try:
-        # Validate input
+        # validate input
         validated_input = FileWriteInput(file_path=file_path, content=content)
-        
-        # Validate and resolve vault path
+
+        # validate and resolve vault path
         vault_path = validate_vault_path(validated_input.file_path)
-        
-        # Create parent directories if they don't exist
+
+        # create parent directories if they don't exist
         vault_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Write file content
+
+        # write file content
         vault_path.write_text(validated_input.content, encoding='utf-8')
-        
+
         return create_success_response()
-        
+
     except ValidationError as e:
         return create_error_response(f"Invalid input: {e}")
     except ValueError as e:
@@ -100,29 +101,103 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
         return create_error_response(f"Unexpected error writing file: {e}")
 
 
-def main():
-    """Main entry point for the MCP server."""
+@mcp.tool()
+def list_todays_journal_entry() -> Dict[str, Any]:
+    '''
+    Get today's journal entry path.
+
+    Returns:
+        Dictionary with today's journal entry path and name
+    '''
     try:
-        # Validate that vault path is configured
+        journal_path = get_today_journal_path()
+
+        # return the path info regardless of whether file exists
+        return {
+            "path": journal_path,
+            "name": Path(journal_path).name
+        }
+
+    except ValueError as e:
+        return create_error_response(str(e))
+    except Exception as e:
+        return create_error_response(f"Unexpected error getting today's journal entry: {e}")
+
+
+@mcp.tool()
+def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[str, str]]:
+    '''
+    List all journal entries for a specific year and month.
+
+    Args:
+        year: Year in YYYY format
+        month: Month in MM format
+
+    Returns:
+        List of journal entries with metadata
+    '''
+    try:
+        # validate input
+        validated_input = YearMonthInput(year=year, month=month)
+
         vault_base = get_vault_base()
-        
-        # Ensure vault directory exists
+        journal_dir = vault_base / "journal" / validated_input.year / validated_input.month
+
+        # get all files in the journal directory
+        files = list_files_in_directory(journal_dir, vault_base)
+
+        # filter for markdown files with correct date format
+        journal_entries = []
+        for file_info in files:
+            file_path = Path(file_info["path"])
+            if file_path.suffix == ".md" and _is_valid_journal_filename(file_path.name, validated_input.year, validated_input.month):
+                journal_entries.append(file_info)
+
+        return sorted(journal_entries, key=lambda x: x["name"])
+
+    except ValidationError as e:
+        return [create_error_response(f"Invalid input: {e}")]
+    except ValueError as e:
+        return [create_error_response(str(e))]
+    except Exception as e:
+        return [create_error_response(f"Unexpected error listing journal entries: {e}")]
+
+
+def _is_valid_journal_filename(filename: str, year: str, month: str) -> bool:
+    '''
+    Check if a filename matches the expected journal entry format.
+
+    Args:
+        filename: The filename to check
+        year: Expected year in YYYY format
+        month: Expected month in MM format
+
+    Returns:
+        True if filename matches YYYY-MM-DD.md format for the given year/month
+    '''
+    # expected pattern: YYYY-MM-DD.md
+    pattern = f"^{year}-{month}-\\d{{2}}\\.md$"
+    return bool(re.match(pattern, filename))
+
+
+def main():
+    ''' Main entry point for the MCP server. '''
+    try:
+        # validate that vault path is configured
+        vault_base = get_vault_base()
+
+        # ensure vault directory exists
         if not vault_base.exists():
             print(f"Error: Vault directory does not exist: {vault_base}", file=sys.stderr)
             sys.exit(1)
-        
+
         if not vault_base.is_dir():
             print(f"Error: Vault path is not a directory: {vault_base}", file=sys.stderr)
             sys.exit(1)
-        
-        # Register tools from other modules
-        register_journal_tools(mcp)
-        register_knowledge_tools(mcp)
-        register_projects_tools(mcp)
-        
-        # Run the server
+
+        # run the server
         mcp.run()
-        
+
     except ValueError as e:
         print(f"Configuration error: {e}", file=sys.stderr)
         sys.exit(1)
