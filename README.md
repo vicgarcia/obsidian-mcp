@@ -1,10 +1,4 @@
-This is an MCP server for managing daily journal entries in Obsidian. This is a stripped-down, opinionated tool that does one thing: it helps Claude Desktop interact with  Obsidian daily notes.
-
-I use Obsidian's daily notes feature to maintain a journal organized by a year and month filesystem. This MCP server gives Claude Desktop access to that journal structure so it can help me generate and manage daily entries.
-
-That's it.
-
-You can do a ton of things with Obsidian. I do a ton of things with Obsidian. And I really don't know what things I want to do. So what I wanted was something minimal that focused on my one major workflow.
+This is an MCP server for managing daily journal entries in [Obsidian](https://obsidian.md). I use the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature to maintain a journal of markdown files organized by a year and month. This MCP server gives Claude Desktop access to that journal structure so it can help me generate and manage daily entries.
 
 The server assumes the journal is organized like this :
 
@@ -50,7 +44,7 @@ Add this to your Claude Desktop MCP settings. Replace the paths and IDs with you
 ```
 
 Notes:
-- Run `id` to get your user:group IDs
+- Run `id` to get your user:group IDs and replace 1000:1000
 - Use your actual timezone (e.g., `America/Chicago`, `Europe/London`)
 
 ## Usage
