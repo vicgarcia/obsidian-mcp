@@ -1,5 +1,3 @@
-''' Main MCP server implementation for Obsidian vault access. '''
-
 import re
 import sys
 from typing import Dict, Any, List
@@ -8,18 +6,23 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
+from .models import (
+    FilePathInput,
+    FileWriteInput,
+    YearMonthInput,
+    ProjectInput,
+)
 from .utils import (
     get_vault_base,
     validate_vault_path,
     create_error_response,
     create_success_response,
     get_today_journal_path,
-    list_files_in_directory
+    list_files_in_directory,
+    list_directories_in_directory,
 )
-from .models import FilePathInput, FileWriteInput, YearMonthInput
 
 
-# initialize the MCP server
 mcp = FastMCP("Obsidian MCP Server")
 
 
@@ -104,7 +107,7 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 @mcp.tool()
 def list_todays_journal_entry() -> Dict[str, Any]:
     '''
-    Get today's journal entry path.
+    Get today's journal entry path in the format journal/YYYY/MM/YYYY-MM-DD.md.
 
     Returns:
         Dictionary with today's journal entry path and name
@@ -128,10 +131,11 @@ def list_todays_journal_entry() -> Dict[str, Any]:
 def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[str, str]]:
     '''
     List all journal entries for a specific year and month.
+    Journal entries are organized as journal/YYYY/MM/YYYY-MM-DD.md.
 
     Args:
-        year: Year in YYYY format
-        month: Month in MM format
+        year: Year in YYYY format (e.g., "2025")
+        month: Month in MM format with leading zero (e.g., "01" for January, "10" for October)
 
     Returns:
         List of journal entries with metadata
@@ -180,7 +184,99 @@ def _is_valid_journal_filename(filename: str, year: str, month: str) -> bool:
     return bool(re.match(pattern, filename))
 
 
-def main():
+@mcp.tool()
+def list_projects() -> List[Dict[str, str]]:
+    '''
+    List all projects (subdirectories in the projects directory).
+
+    Returns:
+        List of project directories with metadata
+    '''
+    try:
+        vault_base = get_vault_base()
+        projects_dir = vault_base / "projects"
+
+        # get all subdirectories in the projects directory
+        projects = list_directories_in_directory(projects_dir, vault_base)
+
+        return projects
+
+    except ValueError as e:
+        return [create_error_response(str(e))]
+    except Exception as e:
+        return [create_error_response(f"Unexpected error listing projects: {e}")]
+
+
+@mcp.tool()
+def list_project_content(project: str) -> List[Dict[str, str]]:
+    '''
+    List all files and directories within a project.
+
+    Args:
+        project: Name of the project directory
+
+    Returns:
+        List of files and directories with metadata
+    '''
+    try:
+        # validate input
+        validated_input = ProjectInput(project=project)
+
+        vault_base = get_vault_base()
+        project_dir = vault_base / "projects" / validated_input.project
+
+        # check if project directory exists
+        if not project_dir.exists():
+            return [create_error_response(f"Project not found: {validated_input.project}")]
+
+        if not project_dir.is_dir():
+            return [create_error_response(f"Project is not a directory: {validated_input.project}")]
+
+        # get all files recursively in the project directory
+        files = list_files_in_directory(project_dir, vault_base, recursive=True)
+
+        return files
+
+    except ValidationError as e:
+        return [create_error_response(f"Invalid input: {e}")]
+    except ValueError as e:
+        return [create_error_response(str(e))]
+    except Exception as e:
+        return [create_error_response(f"Unexpected error listing project content: {e}")]
+
+
+@mcp.tool()
+def create_project(project: str) -> Dict[str, Any]:
+    '''
+    Create a new project directory.
+
+    Args:
+        project: Name of the project directory to create
+
+    Returns:
+        Success indicator or error message
+    '''
+    try:
+        # validate input
+        validated_input = ProjectInput(project=project)
+
+        vault_base = get_vault_base()
+        project_dir = vault_base / "projects" / validated_input.project
+
+        # create the directory (parents=True creates projects dir if it doesn't exist)
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        return create_success_response()
+
+    except ValidationError as e:
+        return create_error_response(f"Invalid input: {e}")
+    except ValueError as e:
+        return create_error_response(str(e))
+    except Exception as e:
+        return create_error_response(f"Unexpected error creating project: {e}")
+
+
+def run():
     ''' Main entry point for the MCP server. '''
     try:
         # validate that vault path is configured
@@ -204,7 +300,3 @@ def main():
     except Exception as e:
         print(f"Unexpected error: {e}", file=sys.stderr)
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,5 +1,3 @@
-''' tests for Pydantic models. '''
-
 import pytest
 from pydantic import ValidationError
 
@@ -7,7 +5,8 @@ from obsidian_mcp.models import (
     JournalDateInput,
     YearMonthInput,
     FilePathInput,
-    FileWriteInput
+    FileWriteInput,
+    ProjectInput
 )
 
 
@@ -67,3 +66,32 @@ class TestFilePathInput:
         ''' test directory traversal prevention. '''
         with pytest.raises(ValidationError, match="directory traversal"):
             FilePathInput(file_path="../../../etc/passwd")
+
+
+class TestProjectInput:
+    ''' test project name validation. '''
+
+    def test_valid_project(self):
+        ''' test valid project name. '''
+        valid_input = ProjectInput(project="my-project")
+        assert valid_input.project == "my-project"
+
+    def test_empty_project(self):
+        ''' test empty project name. '''
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            ProjectInput(project="")
+
+    def test_directory_traversal(self):
+        ''' test directory traversal prevention. '''
+        with pytest.raises(ValidationError, match="cannot contain"):
+            ProjectInput(project="../etc")
+
+    def test_invalid_characters(self):
+        ''' test invalid characters in project name. '''
+        with pytest.raises(ValidationError, match="cannot contain"):
+            ProjectInput(project="project/name")
+
+    def test_whitespace_trimming(self):
+        ''' test that whitespace is trimmed. '''
+        valid_input = ProjectInput(project="  my-project  ")
+        assert valid_input.project == "my-project"

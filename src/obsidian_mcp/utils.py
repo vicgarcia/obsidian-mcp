@@ -1,5 +1,3 @@
-''' Utility functions for the Obsidian MCP server. '''
-
 import os
 from datetime import datetime
 from pathlib import Path
@@ -64,7 +62,11 @@ def get_local_datetime() -> datetime:
 
 
 def get_today_journal_path() -> str:
-    ''' Get today's journal entry path using local timezone. '''
+    '''
+    Get today's journal entry path using local timezone.
+    Returns path in format: journal/YYYY/MM/YYYY-MM-DD.md
+    Month is always two digits with leading zero (e.g., "01", "10").
+    '''
     today = get_local_datetime()
     return f"journal/{today.year}/{today.month:02d}/{today.year}-{today.month:02d}-{today.day:02d}.md"
 
@@ -92,3 +94,21 @@ def list_files_in_directory(directory: Path, vault_base: Path, recursive: bool =
         pass
 
     return sorted(files, key=lambda x: x["name"])
+
+
+def list_directories_in_directory(directory: Path, vault_base: Path) -> List[Dict[str, str]]:
+    ''' List subdirectories in a directory with vault-relative paths. '''
+    directories = []
+
+    if not directory.exists():
+        return directories
+
+    try:
+        for item in directory.iterdir():
+            if item.is_dir():
+                directories.append(create_file_info(item, vault_base))
+    except PermissionError:
+        # return empty list if we can't read the directory
+        pass
+
+    return sorted(directories, key=lambda x: x["name"])

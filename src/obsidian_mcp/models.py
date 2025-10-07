@@ -1,5 +1,3 @@
-''' Pydantic models for input validation in the Obsidian MCP server. '''
-
 import re
 from datetime import datetime
 
@@ -93,3 +91,30 @@ class FileWriteInput(BaseModel):
             raise ValueError("Invalid file path: directory traversal not allowed")
 
         return v.strip()
+
+
+class ProjectInput(BaseModel):
+    ''' Input validation for project operations. '''
+    project: str
+
+    @field_validator("project")
+    @classmethod
+    def validate_project(cls, v: str) -> str:
+        ''' Validate project name format. '''
+        if not v or v.strip() == "":
+            raise ValueError("Project name cannot be empty")
+
+        # remove leading/trailing whitespace
+        v = v.strip()
+
+        # check for invalid characters that could cause path issues
+        invalid_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|"]
+        for char in invalid_chars:
+            if char in v:
+                raise ValueError(f"Project name cannot contain '{char}'")
+
+        # prevent directory traversal
+        if ".." in v:
+            raise ValueError("Project name cannot contain '..'")
+
+        return v

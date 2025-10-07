@@ -1,5 +1,3 @@
-''' unit tests for utility functions. '''
-
 import pytest
 from datetime import datetime
 from pathlib import Path

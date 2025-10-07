@@ -1,5 +1,3 @@
-''' test configuration and fixtures for the Obsidian MCP server tests. '''
-
 import os
 import pytest
 from pathlib import Path

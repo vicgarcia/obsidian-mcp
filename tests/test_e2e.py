@@ -1,9 +1,7 @@
-''' end-to-end tests for the Obsidian MCP server. '''
-
 import pytest
 from pathlib import Path
 
-from obsidian_mcp.server import read_file, write_file
+from obsidian_mcp.server import read_file, write_file, list_projects, list_project_content, create_project
 
 
 class TestFileOperations:
@@ -93,6 +91,79 @@ class TestJournalTools:
         assert any(f["name"] == "2025-01-15.md" for f in files)
 
 
+class TestProjectTools:
+    ''' test project management tools. '''
+
+    def test_create_and_list_projects(self, vault_path):
+        ''' test creating and listing projects. '''
+        # create test projects
+        projects_dir = vault_path / "projects"
+        (projects_dir / "test-project").mkdir(parents=True, exist_ok=True)
+        (projects_dir / "another-project").mkdir(parents=True, exist_ok=True)
+
+        # test listing projects
+        from obsidian_mcp.utils import list_directories_in_directory
+        projects = list_directories_in_directory(projects_dir, vault_path)
+
+        project_names = [p["name"] for p in projects]
+        assert "test-project" in project_names
+        assert "another-project" in project_names
+
+    def test_list_project_content(self, vault_path):
+        ''' test listing content within a project. '''
+        # create test project with content
+        project_dir = vault_path / "projects" / "website-redesign"
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        (project_dir / "requirements.md").write_text("# Requirements\nContent")
+        (project_dir / "design.md").write_text("# Design\nContent")
+
+        from obsidian_mcp.utils import list_files_in_directory
+        files = list_files_in_directory(project_dir, vault_path, recursive=True)
+
+        file_names = [f["name"] for f in files]
+        assert "requirements.md" in file_names
+        assert "design.md" in file_names
+
+    def test_list_projects_tool(self, vault_path):
+        ''' test the list_projects tool. '''
+        # create a test project
+        projects_dir = vault_path / "projects"
+        (projects_dir / "test-project").mkdir(parents=True, exist_ok=True)
+
+        result = list_projects()
+
+        assert isinstance(result, list)
+        project_names = [p["name"] for p in result if "name" in p]
+        assert "test-project" in project_names
+
+    def test_list_project_content_tool(self, vault_path):
+        ''' test the list_project_content tool. '''
+        # ensure website-redesign project exists with files
+        project_dir = vault_path / "projects" / "website-redesign"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "requirements.md").write_text("# Requirements")
+        (project_dir / "design.md").write_text("# Design")
+
+        result = list_project_content("website-redesign")
+
+        assert isinstance(result, list)
+        file_names = [f["name"] for f in result if "name" in f]
+        assert "requirements.md" in file_names
+        assert "design.md" in file_names
+
+    def test_create_project_tool(self, vault_path):
+        ''' test the create_project tool. '''
+        result = create_project("new-test-project")
+
+        assert result == {"success": True}
+
+        # verify project was created
+        project_dir = vault_path / "projects" / "new-test-project"
+        assert project_dir.exists()
+        assert project_dir.is_dir()
+
+
 class TestIntegration:
     ''' integration tests combining multiple operations. '''
 
@@ -116,3 +187,23 @@ class TestIntegration:
         files = list_files_in_directory(jan_dir, vault_path)
 
         assert any(f["name"] == "2025-01-20.md" for f in files)
+
+    def test_full_workflow_projects(self, vault_path):
+        ''' test a complete project workflow. '''
+        # 1. create a project directory
+        result = create_project("test-workflow-project")
+        assert result == {"success": True}
+
+        # 2. add content to the project
+        content = "# Project Overview\n\nProject details here."
+        result = write_file("projects/test-workflow-project/overview.md", content)
+        assert result == {"success": True}
+
+        # 3. read the content back
+        result = read_file("projects/test-workflow-project/overview.md")
+        assert "Project Overview" in result["content"]
+
+        # 4. verify project listing
+        result = list_projects()
+        project_names = [p["name"] for p in result if "name" in p]
+        assert "test-workflow-project" in project_names
