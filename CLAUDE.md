@@ -83,6 +83,8 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 **No abstraction layers**: Direct path manipulation with pathlib. No ORMs, no query builders, just file operations.
 
+**Logging**: Comprehensive logging throughout using Python's logging module. LOG_LEVEL environment variable (debug/info) controls verbosity. All exceptions logged with full stack traces. All log messages use lowercase except proper names.
+
 ## MCP Tools (7 total)
 
 **General file operations**:
@@ -108,6 +110,7 @@ Non-negotiable conventions:
 - Single-line docstrings have spaces: `''' text '''`
 - Files end with blank line
 - No file-level docstrings (removed for simplicity)
+- Log messages in lowercase (except proper names like YYYY, TZ, etc.)
 
 ## Deployment
 
@@ -130,6 +133,7 @@ Configure Claude Desktop:
         "-v", "/path/to/vault:/vault",
         "-e", "OBSIDIAN_VAULT_PATH=/vault",
         "-e", "TZ=America/New_York",
+        "-e", "LOG_LEVEL=info",
         "obsidian-mcp:local"
       ]
     }
@@ -141,6 +145,7 @@ User must set:
 - Their actual user:group IDs (from `id` command)
 - Absolute vault path
 - Their timezone
+- Optional: LOG_LEVEL (debug for verbose logging, info for normal)
 
 ## Security
 
@@ -211,5 +216,25 @@ Current scope: journal entries + project tracking. No knowledge management, no t
 - **Console script**: `obsidian-mcp` (configured in pyproject.toml)
 - **Main function**: `obsidian_mcp.server.run()`
 - **Package import**: `from obsidian_mcp import run`
+- **No `__main__` blocks**: Entry point configured via pyproject.toml only
+- **No `__all__` exports**: Keep imports simple
+
+## Recent Changes (Current Session)
+
+**Projects functionality restored**: Re-added from git history (commit e4e1b44) but integrated into server.py instead of separate projects.py file.
+
+**Logging added**: Comprehensive logging throughout codebase:
+- `server.py` and `utils.py` both have logger instances
+- `run()` function configures logging.basicConfig with LOG_LEVEL env var
+- All tool functions log entry, success, warnings, and errors
+- All exceptions logged with full stack traces via logger.exception()
+
+**Helper function moved**: `is_valid_journal_filename()` moved from server.py to utils.py (no longer private with underscore prefix).
+
+**Code cleanup**: Removed unused `__main__` blocks and `__all__` exports from __init__.py.
+
+**Tests updated**: Added 5 tests for ProjectInput model validation (40 total tests now).
+
+**Documentation updated**: README.md expanded with project workflow examples and vault structure. CLAUDE.md updated with logging details.
 
 That's it. Simple project, simple rules.
