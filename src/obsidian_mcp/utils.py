@@ -1,18 +1,24 @@
+from typing import Dict, List
 import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
 import zoneinfo
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 def get_vault_base() -> Path:
     ''' Get the vault base path from environment variable. '''
     vault_path = os.getenv('OBSIDIAN_VAULT_PATH', '/vault')
     if not vault_path:
+        logger.error("OBSIDIAN_VAULT_PATH environment variable is required")
         raise ValueError("OBSIDIAN_VAULT_PATH environment variable is required")
 
-    return Path(vault_path).resolve()
+    resolved_path = Path(vault_path).resolve()
+    logger.debug(f"vault base path: {resolved_path}")
+    return resolved_path
 
 
 def validate_vault_path(file_path: str) -> Path:
@@ -22,8 +28,10 @@ def validate_vault_path(file_path: str) -> Path:
 
     # security check: ensure path is within vault
     if not vault_path.is_relative_to(vault_base):
+        logger.warning(f"path traversal attempt blocked: {file_path}")
         raise ValueError(f"Invalid path: {file_path} is outside vault directory")
 
+    logger.debug(f"validated vault path: {vault_path}")
     return vault_path
 
 
@@ -53,12 +61,15 @@ def get_local_datetime() -> datetime:
         tz_name = os.getenv('TZ')
         if tz_name:
             tz = zoneinfo.ZoneInfo(tz_name)
+            logger.debug(f"using timezone from TZ env var: {tz_name}")
             return datetime.now(tz)
 
         # fall back to system local time
+        logger.debug("using system local timezone")
         return datetime.now().astimezone()
-    except Exception:
+    except Exception as e:
         # final fallback to naive datetime
+        logger.warning(f"timezone detection failed, using naive datetime: {e}")
         return datetime.now()
 
 
@@ -77,6 +88,7 @@ def list_files_in_directory(directory: Path, vault_base: Path, recursive: bool =
     files = []
 
     if not directory.exists():
+        logger.debug(f"directory does not exist: {directory}")
         return files
 
     try:
@@ -90,8 +102,10 @@ def list_files_in_directory(directory: Path, vault_base: Path, recursive: bool =
             for item in directory.iterdir():
                 if item.is_file():
                     files.append(create_file_info(item, vault_base))
+        logger.debug(f"listed {len(files)} files in {directory} (recursive={recursive})")
     except PermissionError:
         # return empty list if we can't read the directory
+        logger.warning(f"permission denied reading directory: {directory}")
         pass
 
     return sorted(files, key=lambda x: x["name"])
@@ -102,14 +116,17 @@ def list_directories_in_directory(directory: Path, vault_base: Path) -> List[Dic
     directories = []
 
     if not directory.exists():
+        logger.debug(f"directory does not exist: {directory}")
         return directories
 
     try:
         for item in directory.iterdir():
             if item.is_dir():
                 directories.append(create_file_info(item, vault_base))
+        logger.debug(f"listed {len(directories)} directories in {directory}")
     except PermissionError:
         # return empty list if we can't read the directory
+        logger.warning(f"permission denied reading directory: {directory}")
         pass
 
     return sorted(directories, key=lambda x: x["name"])
