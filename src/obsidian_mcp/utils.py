@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -112,3 +113,20 @@ def list_directories_in_directory(directory: Path, vault_base: Path) -> List[Dic
         pass
 
     return sorted(directories, key=lambda x: x["name"])
+
+
+def is_valid_journal_filename(filename: str, year: str, month: str) -> bool:
+    '''
+    Check if a filename matches the expected journal entry format.
+
+    Args:
+        filename: The filename to check
+        year: Expected year in YYYY format
+        month: Expected month in MM format
+
+    Returns:
+        True if filename matches YYYY-MM-DD.md format for the given year/month
+    '''
+    # expected pattern: YYYY-MM-DD.md
+    pattern = f"^{year}-{month}-\\d{{2}}\\.md$"
+    return bool(re.match(pattern, filename))
