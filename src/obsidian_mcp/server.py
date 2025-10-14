@@ -83,6 +83,7 @@ def read_file(file_path: str) -> Dict[str, Any]:
 def write_file(file_path: str, content: str) -> Dict[str, Any]:
     '''
     Write content to a file in the Obsidian vault.
+    It's good practice to read from a file before writing to ensure nothing is overwritten.
 
     Args:
         file_path: Vault-relative path to the file
@@ -123,6 +124,16 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 def list_todays_journal_entry() -> Dict[str, Any]:
     '''
     Get today's journal entry path in the format journal/YYYY/MM/YYYY-MM-DD.md.
+
+    A journal entry file will generally consist of a narritive diary for the day
+    at the top, then a markdown horizontal rule of three dashes ---, then a section
+    for freeform notes and text snippets from the day.
+
+    When writing a daily journal entry, read the file first. When adding the entry
+    for the day, place the narration at the top of the file and seperate from existing
+    content with a horizontal rule if the file is not already formatted as such.
+
+    Do not include a header with the date in the file, Obsidian handles this.
 
     Returns:
         Dictionary with today's journal entry path and name
