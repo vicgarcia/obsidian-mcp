@@ -47,3 +47,26 @@ This is a test note for the Obsidian MCP server.
 
 Some content here with [[links]] and #tags.
 """
+
+
+@pytest.fixture
+def setup_knowledge_guides(vault_path):
+    ''' create sample knowledge guides for testing. '''
+    knowledge_dir = vault_path / "knowledge"
+    knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+    # create test guides
+    guides = {
+        "python-asyncio.md": "# Python Asyncio\n\nComplete guide to async programming.",
+        "docker-networking.md": "# Docker Networking\n\nNetworking concepts in Docker.",
+        "git-workflows.md": "# Git Workflows\n\nBranching strategies and workflows.",
+    }
+
+    for filename, content in guides.items():
+        (knowledge_dir / filename).write_text(content)
+
+    yield knowledge_dir
+
+    # cleanup
+    for filename in guides.keys():
+        (knowledge_dir / filename).unlink(missing_ok=True)

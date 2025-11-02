@@ -2,28 +2,30 @@
 
 ## Project Overview
 
-This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries and project tracking without the complexity of full-featured Obsidian tools.
+This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, and knowledge management without the complexity of full-featured Obsidian tools.
 
 The server provides Claude Desktop with access to:
 - Journal entries organized in a year/month filesystem structure (journal/YYYY/MM/)
 - Project directories for organizing work (projects/)
+- Knowledge guides for comprehensive topic documentation (knowledge/)
 - General file read/write operations across the vault
 
 ## Current Status
 
-Production ready. 7 tools implemented, 40 tests passing, Docker deployment configured.
+Production ready. 8 tools implemented, 45 tests passing, Docker deployment configured.
 
 This is feature-complete by design. The goal was simplicity, not comprehensiveness.
 
 ## Design Philosophy
 
-### Scope: Journal and Projects Only
+### Scope: Journal, Projects, and Knowledge
 
-Most Obsidian MCP servers try to expose everything - knowledge bases, tags, templates, complex queries, etc. That creates complexity and maintenance overhead.
+Most Obsidian MCP servers try to expose everything - tags, templates, complex queries, graph analysis, etc. That creates complexity and maintenance overhead.
 
-This server focuses on two core workflows:
+This server focuses on three core workflows:
 1. **Journal entries**: Daily notes with strict YYYY/MM/DD filesystem hierarchy
 2. **Project tracking**: Simple directory-based organization for ongoing work
+3. **Knowledge guides**: Flat directory of comprehensive topic documentation
 
 No templates, no knowledge graphs, no tag systems. Just files organized in predictable directories.
 
@@ -43,14 +45,21 @@ projects/project-name/
 Each project is a subdirectory. Naming is flexible but must avoid filesystem special characters.
 No nested project hierarchies - keep it flat.
 
+**Knowledge guides**:
+```
+knowledge/topic-name.md
+```
+Flat structure - all guides live directly in knowledge/ with no subdirectories. Use descriptive filenames that clearly indicate content (e.g., `python-asyncio.md`, `docker-networking.md`, `git-workflows.md`). No metadata, no frontmatter parsing - the filename is the documentation.
+
 ### Simplicity Over Features
 
 Every omitted feature is a decision to keep the codebase maintainable:
 - No templates (just create files directly)
-- No knowledge management (separate tools handle this better)
 - No tag support (filesystem organization is enough)
 - No complex queries (just list and read)
 - No file deletion/moving (use read/write instead)
+- No subdirectories in knowledge (flat structure only)
+- No metadata parsing (filenames describe content)
 
 Each omitted feature means less code to maintain, fewer edge cases, and faster execution.
 
@@ -85,7 +94,7 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 **Logging**: Comprehensive logging throughout using Python's logging module. LOG_LEVEL environment variable (debug/info) controls verbosity. All exceptions logged with full stack traces. All log messages use lowercase except proper names.
 
-## MCP Tools (7 total)
+## MCP Tools (8 total)
 
 **General file operations**:
 - `read_file(file_path)` - read any file in vault
@@ -99,6 +108,9 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 - `list_projects()` - list all project directories
 - `list_project_content(project)` - list files within a project
 - `create_project(project)` - create new project directory
+
+**Knowledge operations**:
+- `list_knowledge_guides()` - list all knowledge guides (markdown files only, alphabetically sorted)
 
 No delete/move operations. Read and write handle file modifications.
 
@@ -157,12 +169,13 @@ User must set:
 
 ## Testing
 
-40 tests covering:
+45 tests covering:
 - Input validation (models) - 14 tests
 - Path operations (utils) - 11 tests
 - File operations (e2e) - 6 tests
 - Journal tools (e2e) - 2 tests
 - Project tools (e2e) - 5 tests
+- Knowledge tools (e2e) - 5 tests
 - Integration workflows (e2e) - 2 tests
 
 Fast execution (< 1 second). No coverage reporting because it's overhead without value for this codebase size.
@@ -185,7 +198,7 @@ No database, no web framework, no query engines.
 
 **Removed in stripped-down version**:
 - Templates system (templates.py) - stayed removed
-- Knowledge base tools (knowledge.py) - stayed removed
+- Knowledge base tools (knowledge.py) - **re-added by user request (simplified)**
 - Project management (projects.py) - **re-added by user request**
 - Docker Compose setup - stayed removed
 - Coverage testing - stayed removed
@@ -193,15 +206,17 @@ No database, no web framework, no query engines.
 
 **Project management restored**: User explicitly requested projects functionality be restored. Unlike the first version with separate files (journal.py, knowledge.py, projects.py), all tools now live in server.py for simplicity.
 
+**Knowledge management added**: User requested knowledge guide support. Unlike the original complex knowledge base with templates and metadata, this version is minimal - just list markdown files in knowledge/. No templates, no frontmatter, no complex queries. Filename describes content.
+
 ## Context for Future Sessions
 
 - This is feature-complete by design
 - Focus is maintenance and bug fixes, not new features
-- Don't add removed functionality (templates, knowledge base) without explicit request
+- Don't add removed functionality (templates) without explicit request
 - Architecture decisions were intentional, not accidental
 - Simplicity is the goal, not comprehensiveness
 
-Current scope: journal entries + project tracking. No knowledge management, no templates, no complex queries.
+Current scope: journal entries + project tracking + knowledge guides. No templates, no complex queries, no metadata parsing.
 
 ## Development Workflow
 
@@ -209,7 +224,7 @@ Current scope: journal entries + project tracking. No knowledge management, no t
 2. Code style rules are non-negotiable
 3. Keep dependencies minimal
 4. Docker is the deployment path
-5. Don't break the 7-tool interface
+5. Don't break the 8-tool interface
 
 ## Entry Points
 
@@ -219,7 +234,9 @@ Current scope: journal entries + project tracking. No knowledge management, no t
 - **No `__main__` blocks**: Entry point configured via pyproject.toml only
 - **No `__all__` exports**: Keep imports simple
 
-## Recent Changes (Current Session)
+## Recent Changes
+
+### Previous Session
 
 **Projects functionality restored**: Re-added from git history (commit e4e1b44) but integrated into server.py instead of separate projects.py file.
 
@@ -236,5 +253,38 @@ Current scope: journal entries + project tracking. No knowledge management, no t
 **Tests updated**: Added 5 tests for ProjectInput model validation (40 total tests now).
 
 **Documentation updated**: README.md expanded with project workflow examples and vault structure. CLAUDE.md updated with logging details.
+
+### Current Session
+
+**Knowledge management added**: User requested knowledge guide support for comprehensive topic documentation.
+
+**Implementation details**:
+- Added `list_knowledge_guides()` tool in server.py (~35 lines)
+- Lists markdown files in knowledge/ directory (flat structure, no subdirectories)
+- Filters to .md files only, alphabetically sorted
+- Uses existing `list_files_in_directory()` utility with recursive=False
+- No input validation needed (no parameters)
+- Follows existing patterns (mirrors projects approach)
+
+**Testing added**:
+- Added `setup_knowledge_guides()` fixture in conftest.py
+- Added `TestKnowledgeTools` class in test_e2e.py with 5 tests:
+  - Empty directory handling
+  - Listing guides with content
+  - Markdown file filtering (non-.md files ignored)
+  - Reading guides via read_file
+  - Writing guides via write_file
+- Total tests increased from 40 to 45
+- All tests pass in < 1 second
+
+**Documentation updated**:
+- README.md: Added knowledge workflow section, updated vault structure diagram, updated tool count
+- CLAUDE.md: Updated scope, filesystem organization, tool list, test breakdown, feature history
+
+**Design rationale**:
+- Minimal surface area: one listing tool only (read/write already work)
+- Flat structure enforced (no subdirectories)
+- Descriptive filenames (no metadata, no frontmatter parsing)
+- Consistent with existing patterns (same approach as projects)
 
 That's it. Simple project, simple rules.

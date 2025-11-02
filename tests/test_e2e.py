@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from obsidian_mcp.server import read_file, write_file, list_projects, list_project_content, create_project
+from obsidian_mcp.server import read_file, write_file, list_projects, list_project_content, create_project, list_knowledge_guides
 
 
 class TestFileOperations:
@@ -162,6 +162,80 @@ class TestProjectTools:
         project_dir = vault_path / "projects" / "new-test-project"
         assert project_dir.exists()
         assert project_dir.is_dir()
+
+
+class TestKnowledgeTools:
+    ''' test knowledge management tools. '''
+
+    def test_list_knowledge_guides_empty(self, vault_path):
+        ''' test listing knowledge guides when directory is empty. '''
+        # ensure knowledge directory exists but is empty
+        knowledge_dir = vault_path / "knowledge"
+        knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+        result = list_knowledge_guides()
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_list_knowledge_guides_with_content(self, setup_knowledge_guides):
+        ''' test listing knowledge guides when guides exist. '''
+        result = list_knowledge_guides()
+
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+        guide_names = [g["name"] for g in result]
+        assert "python-asyncio.md" in guide_names
+        assert "docker-networking.md" in guide_names
+        assert "git-workflows.md" in guide_names
+
+        # verify paths are correct
+        guide_paths = [g["path"] for g in result]
+        assert "knowledge/python-asyncio.md" in guide_paths
+
+    def test_list_knowledge_guides_filters_markdown(self, vault_path):
+        ''' test that non-markdown files are filtered out. '''
+        knowledge_dir = vault_path / "knowledge"
+        knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+        # create markdown and non-markdown files
+        (knowledge_dir / "guide.md").write_text("# Guide")
+        (knowledge_dir / "image.png").write_bytes(b"fake image data")
+        (knowledge_dir / "data.json").write_text('{"key": "value"}')
+
+        result = list_knowledge_guides()
+
+        assert len(result) == 1
+        assert result[0]["name"] == "guide.md"
+
+    def test_read_knowledge_guide(self, setup_knowledge_guides):
+        ''' test reading a knowledge guide using read_file. '''
+        result = read_file("knowledge/python-asyncio.md")
+
+        assert "content" in result
+        assert "Python Asyncio" in result["content"]
+        assert "async programming" in result["content"]
+
+    def test_write_knowledge_guide(self, vault_path):
+        ''' test writing a new knowledge guide using write_file. '''
+        knowledge_dir = vault_path / "knowledge"
+        knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+        content = "# Kubernetes Basics\n\nIntroduction to Kubernetes concepts."
+        result = write_file("knowledge/kubernetes-basics.md", content)
+
+        assert result == {"success": True}
+
+        # verify file was created
+        guide_file = knowledge_dir / "kubernetes-basics.md"
+        assert guide_file.exists()
+        assert guide_file.read_text() == content
+
+        # verify it appears in listing
+        guides = list_knowledge_guides()
+        guide_names = [g["name"] for g in guides]
+        assert "kubernetes-basics.md" in guide_names
 
 
 class TestIntegration:

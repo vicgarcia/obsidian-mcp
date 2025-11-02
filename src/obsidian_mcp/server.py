@@ -310,6 +310,43 @@ def create_project(project: str) -> Dict[str, Any]:
         return create_error_response(f"Unexpected error creating project: {e}")
 
 
+@mcp.tool()
+def list_knowledge_guides() -> List[Dict[str, str]]:
+    '''
+    List all knowledge guides (markdown files in the knowledge directory).
+
+    Knowledge guides are complete, standalone documentation on specific topics.
+    Use descriptive filenames that clearly indicate content (e.g., 'python-asyncio.md',
+    'docker-networking.md', 'git-workflows.md').
+
+    The knowledge directory uses a flat structure - all guides live directly in
+    knowledge/*.md with no subdirectories. This keeps discovery simple.
+
+    Returns:
+        List of guide files with metadata, sorted alphabetically
+    '''
+    try:
+        logger.debug("list_knowledge_guides called")
+        vault_base = get_vault_base()
+        knowledge_dir = vault_base / "knowledge"
+
+        # get all files in the knowledge directory (non-recursive)
+        files = list_files_in_directory(knowledge_dir, vault_base, recursive=False)
+
+        # filter to markdown files only
+        guides = [f for f in files if Path(f["path"]).suffix == ".md"]
+
+        logger.info(f"found {len(guides)} knowledge guides")
+        return guides
+
+    except ValueError as e:
+        logger.error(f"value error listing knowledge guides: {e}")
+        return [create_error_response(str(e))]
+    except Exception as e:
+        logger.exception(f"unexpected error listing knowledge guides: {e}")
+        return [create_error_response(f"Unexpected error listing knowledge guides: {e}")]
+
+
 def run():
     ''' Main entry point for the MCP server. '''
     # configure logging

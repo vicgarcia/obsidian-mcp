@@ -1,6 +1,6 @@
-I have two main workflows using [Obsidian](https://obsidian.md): daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, and project-based document organization.
+I have three main workflows using [Obsidian](https://obsidian.md): daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, and knowledge management with comprehensive markdown guides.
 
-This MCP server gives Claude Desktop access to both workflows so it can help me generate journal entries and manage project files.
+This MCP server gives Claude Desktop access to all three workflows so it can help me generate journal entries, manage project files, and maintain knowledge documentation.
 
 The server assumes the vault is organized like this:
 
@@ -15,17 +15,22 @@ vault/
 │       ├── 02/
 │       └── 10/
 │           └── 2025-10-06.md
-└── projects/
-    ├── home-automation/
-    │   ├── requirements.md
-    │   ├── architecture.md
-    │   └── device-list.md
-    ├── blog-redesign/
-    │   ├── design.md
-    │   └── content-structure.md
-    └── obsidian-mcp/
-        ├── roadmap.md
-        └── design-decisions.md
+├── projects/
+│   ├── home-automation/
+│   │   ├── requirements.md
+│   │   ├── architecture.md
+│   │   └── device-list.md
+│   ├── blog-redesign/
+│   │   ├── design.md
+│   │   └── content-structure.md
+│   └── obsidian-mcp/
+│       ├── roadmap.md
+│       └── design-decisions.md
+└── knowledge/
+    ├── python-asyncio.md
+    ├── docker-networking.md
+    ├── git-workflows.md
+    └── kubernetes-basics.md
 ```
 
 ## Installation
@@ -40,7 +45,7 @@ cd obsidian-mcp
 Build the Docker image:
 
 ```bash
-./build.sh
+docker build -t obsidian-mcp:local .
 ```
 
 ## Configuration
@@ -89,6 +94,16 @@ Claude can help organize and manage project documents:
 - Read and write project documentation
 - Search across project files
 
+### Knowledge Workflow
+
+Claude can help maintain comprehensive topic guides:
+- List all knowledge guides
+- Read existing guides for reference
+- Create new guides on specific topics
+- Update and expand existing documentation
+
+Knowledge guides use descriptive filenames (e.g., `python-asyncio.md`, `docker-networking.md`) and live in a flat directory structure for easy discovery.
+
 ### Available Tools
 
 **File Operations**
@@ -103,6 +118,9 @@ Claude can help organize and manage project documents:
 - `list_projects()` - list all project directories
 - `list_project_content(project)` - list files within a project
 - `create_project(project)` - create a new project directory
+
+**Knowledge Operations**
+- `list_knowledge_guides()` - list all knowledge guides
 
 ### Security
 
