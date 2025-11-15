@@ -1,8 +1,6 @@
-I have three main workflows using [Obsidian](https://obsidian.md): daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, and knowledge management with comprehensive markdown guides.
+this MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for three main workflows: daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, and knowledge management with comprehensive markdown guides.
 
-This MCP server gives Claude Desktop access to all three workflows so it can help me generate journal entries, manage project files, and maintain knowledge documentation.
-
-The server assumes the vault is organized like this:
+the server assumes your vault is organized like this:
 
 ```
 vault/
@@ -33,24 +31,135 @@ vault/
     └── kubernetes-basics.md
 ```
 
-## Installation
+## setup
 
-Clone the repository:
+this mcp server runs in a docker container for use with claude desktop.
+
+#### get the docker image
 
 ```bash
-git clone https://github.com/vicgarcia/obsidian-mcp.git
-cd obsidian-mcp
+docker pull ghcr.io/vicgarcia/obsidian-mcp:latest
 ```
 
-Build the Docker image:
+#### configure claude desktop
+
+add this to your claude desktop mcp settings:
+
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "--user", "1000:1000",
+        "-v", "/path/to/your/vault:/vault",
+        "-e", "TZ=America/New_York",
+        "ghcr.io/vicgarcia/obsidian-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+replace the following:
+- `1000:1000` with your user:group IDs (run `id` command to find yours)
+- `/path/to/your/vault` with the absolute path to your obsidian vault
+- `America/New_York` with your timezone (e.g., `America/Chicago`, `Europe/London`)
+
+optional: add `-e "LOG_LEVEL=debug"` to the args for detailed logging
+
+## usage
+
+#### journal workflow
+
+the typical workflow is asking claude to help write or update today's journal entry. claude can:
+- get today's journal path
+- read existing content
+- help draft or expand entries
+- list entries from specific months
+- read past entries for context
+
+#### project workflow
+
+claude can help organize and manage project documents:
+- list all projects
+- browse files within a project
+- create new project directories
+- read and write project documentation
+- search across project files
+
+#### knowledge workflow
+
+claude can help maintain comprehensive topic guides:
+- list all knowledge guides
+- read existing guides for reference
+- create new guides on specific topics
+- update and expand existing documentation
+
+knowledge guides use descriptive filenames (e.g., `python-asyncio.md`, `docker-networking.md`) and live in a flat directory structure for easy discovery.
+
+#### available tools
+
+**file operations**
+- `read_file(file_path)` - read any file in the vault
+- `write_file(file_path, content)` - write to any file in the vault
+
+**journal operations**
+- `list_todays_journal_entry()` - get the path for today's entry
+- `list_journal_entries_by_year_and_month(year, month)` - list entries for a specific month
+
+**project operations**
+- `list_projects()` - list all project directories
+- `list_project_content(project)` - list files within a project
+- `create_project(project)` - create a new project directory
+
+**knowledge operations**
+- `list_knowledge_guides()` - list all knowledge guides
+
+#### security
+
+path validation prevents access outside your vault. all file operations are checked against the vault root directory. docker runs with your user permissions, so file ownership stays correct.
+
+## dev
+
+if you want to work on this locally:
+
+```bash
+git clone https://github.com/vicgarcia/obsidian-mcp
+cd obsidian-mcp
+
+# install dependencies
+uv sync
+
+# run tests
+uv run pytest
+```
+
+#### project structure
+
+```
+src/
+  obsidian_mcp/
+    __init__.py       # package marker
+    server.py         # mcp tools implementation + run() entry point
+    models.py         # input validation
+    utils.py          # helper functions
+
+tests/
+  conftest.py         # pytest fixtures
+  test_e2e.py         # end-to-end tests
+  test_models.py      # validation tests
+  test_utils.py       # utility tests
+```
+
+#### building docker image locally
 
 ```bash
 docker build -t obsidian-mcp:local .
 ```
 
-## Configuration
-
-Add this to your Claude Desktop MCP settings. Replace the paths and IDs with your own:
+to use the local build in claude desktop, update your mcp settings to use `obsidian-mcp:local` instead of `ghcr.io/vicgarcia/obsidian-mcp:latest`:
 
 ```json
 {
@@ -68,91 +177,3 @@ Add this to your Claude Desktop MCP settings. Replace the paths and IDs with you
   }
 }
 ```
-
-Notes:
-- Run `id` to get your user:group IDs and replace 1000:1000
-- Use your actual timezone (e.g., `America/Chicago`, `Europe/London`)
-- Set `LOG_LEVEL=debug` in the environment variables for detailed logging
-
-## Usage
-
-### Journal Workflow
-
-The typical workflow is asking Claude to help write or update today's journal entry. Claude can:
-- Get today's journal path
-- Read existing content
-- Help draft or expand entries
-- List entries from specific months
-- Read past entries for context
-
-### Project Workflow
-
-Claude can help organize and manage project documents:
-- List all projects
-- Browse files within a project
-- Create new project directories
-- Read and write project documentation
-- Search across project files
-
-### Knowledge Workflow
-
-Claude can help maintain comprehensive topic guides:
-- List all knowledge guides
-- Read existing guides for reference
-- Create new guides on specific topics
-- Update and expand existing documentation
-
-Knowledge guides use descriptive filenames (e.g., `python-asyncio.md`, `docker-networking.md`) and live in a flat directory structure for easy discovery.
-
-### Available Tools
-
-**File Operations**
-- `read_file(file_path)` - read any file in the vault
-- `write_file(file_path, content)` - write to any file in the vault
-
-**Journal Operations**
-- `list_todays_journal_entry()` - get the path for today's entry
-- `list_journal_entries_by_year_and_month(year, month)` - list entries for a specific month
-
-**Project Operations**
-- `list_projects()` - list all project directories
-- `list_project_content(project)` - list files within a project
-- `create_project(project)` - create a new project directory
-
-**Knowledge Operations**
-- `list_knowledge_guides()` - list all knowledge guides
-
-### Security
-
-Path validation prevents access outside your vault. All file operations are checked against the vault root directory. Docker runs with your user permissions, so file ownership stays correct.
-
-## Development
-
-Run tests:
-```bash
-uv run pytest
-```
-
-The project structure is simple:
-```
-src/obsidian_mcp/
-├── server.py    # MCP server and all tools
-├── models.py    # input validation
-└── utils.py     # helper functions
-
-tests/
-├── conftest.py
-├── test_e2e.py
-├── test_models.py
-└── test_utils.py
-```
-
-## Troubleshooting
-
-**Vault path issues**: Make sure `OBSIDIAN_VAULT_PATH` points to your actual vault directory and that Docker can access it.
-
-**Permission errors**: Check that your `--user` flag matches your actual user:group IDs from the `id` command.
-
-**Wrong dates**: Set the `TZ` environment variable to your local timezone.
-
-**Debugging**: Set `LOG_LEVEL=debug` in your Docker environment variables to see detailed logging output. Add `-e "LOG_LEVEL=debug"` to the Docker args in your Claude Desktop config.
