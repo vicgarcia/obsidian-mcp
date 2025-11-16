@@ -55,6 +55,11 @@ def setup_knowledge_guides(vault_path):
     knowledge_dir = vault_path / "knowledge"
     knowledge_dir.mkdir(parents=True, exist_ok=True)
 
+    # clean any existing files first
+    for existing_file in knowledge_dir.glob("*"):
+        if existing_file.is_file():
+            existing_file.unlink()
+
     # create test guides
     guides = {
         "python-asyncio.md": "# Python Asyncio\n\nComplete guide to async programming.",
@@ -67,6 +72,7 @@ def setup_knowledge_guides(vault_path):
 
     yield knowledge_dir
 
-    # cleanup
-    for filename in guides.keys():
-        (knowledge_dir / filename).unlink(missing_ok=True)
+    # cleanup all files
+    for existing_file in knowledge_dir.glob("*"):
+        if existing_file.is_file():
+            existing_file.unlink()

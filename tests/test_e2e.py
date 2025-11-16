@@ -173,6 +173,11 @@ class TestKnowledgeTools:
         knowledge_dir = vault_path / "knowledge"
         knowledge_dir.mkdir(parents=True, exist_ok=True)
 
+        # clean any existing files
+        for existing_file in knowledge_dir.glob("*"):
+            if existing_file.is_file():
+                existing_file.unlink()
+
         result = list_knowledge_guides()
 
         assert isinstance(result, list)
@@ -199,6 +204,11 @@ class TestKnowledgeTools:
         knowledge_dir = vault_path / "knowledge"
         knowledge_dir.mkdir(parents=True, exist_ok=True)
 
+        # clean any existing files
+        for existing_file in knowledge_dir.glob("*"):
+            if existing_file.is_file():
+                existing_file.unlink()
+
         # create markdown and non-markdown files
         (knowledge_dir / "guide.md").write_text("# Guide")
         (knowledge_dir / "image.png").write_bytes(b"fake image data")
@@ -208,6 +218,11 @@ class TestKnowledgeTools:
 
         assert len(result) == 1
         assert result[0]["name"] == "guide.md"
+
+        # cleanup
+        (knowledge_dir / "guide.md").unlink()
+        (knowledge_dir / "image.png").unlink()
+        (knowledge_dir / "data.json").unlink()
 
     def test_read_knowledge_guide(self, setup_knowledge_guides):
         ''' test reading a knowledge guide using read_file. '''
@@ -236,6 +251,9 @@ class TestKnowledgeTools:
         guides = list_knowledge_guides()
         guide_names = [g["name"] for g in guides]
         assert "kubernetes-basics.md" in guide_names
+
+        # cleanup
+        guide_file.unlink()
 
 
 class TestIntegration:
