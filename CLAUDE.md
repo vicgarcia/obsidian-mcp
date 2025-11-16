@@ -4,7 +4,7 @@
 
 This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, and knowledge management without the complexity of full-featured Obsidian tools.
 
-The server provides Claude Desktop with access to:
+The server provides Claude Desktop and Claude Code with access to:
 - Journal entries organized in a year/month filesystem structure (journal/YYYY/MM/)
 - Project directories for organizing work (projects/)
 - Knowledge guides for comprehensive topic documentation (knowledge/)
@@ -31,25 +31,13 @@ No templates, no knowledge graphs, no tag systems. Just files organized in predi
 
 ### Filesystem Organization
 
-**Journal entries**:
-```
-journal/YYYY/MM/YYYY-MM-DD.md
-```
-Month is always two digits with leading zero (01-12, not "10 - October").
-This structure is rigid by design - keeps things predictable and makes date-based queries straightforward.
+See README.md for vault structure diagram.
 
-**Projects**:
-```
-projects/project-name/
-```
-Each project is a subdirectory. Naming is flexible but must avoid filesystem special characters.
-No nested project hierarchies - keep it flat.
+**Journal**: `journal/YYYY/MM/YYYY-MM-DD.md` - month always two digits (01-12), rigid by design for predictable date queries.
 
-**Knowledge guides**:
-```
-knowledge/topic-name.md
-```
-Flat structure - all guides live directly in knowledge/ with no subdirectories. Use descriptive filenames that clearly indicate content (e.g., `python-asyncio.md`, `docker-networking.md`, `git-workflows.md`). No metadata, no frontmatter parsing - the filename is the documentation.
+**Projects**: `projects/project-name/` - flat hierarchy, no nesting.
+
+**Knowledge**: `knowledge/topic-name.md` - flat structure, descriptive filenames (e.g., `python-asyncio.md`), no metadata/frontmatter.
 
 ### Simplicity Over Features
 
@@ -96,23 +84,9 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 ## MCP Tools (8 total)
 
-**General file operations**:
-- `read_file(file_path)` - read any file in vault
-- `write_file(file_path, content)` - write to any file in vault
+2 general file operations + 2 journal + 3 project + 1 knowledge = 8 tools total.
 
-**Journal operations**:
-- `list_todays_journal_entry()` - get path for today in format journal/YYYY/MM/YYYY-MM-DD.md
-- `list_journal_entries_by_year_and_month(year, month)` - list entries for specific YYYY/MM
-
-**Project operations**:
-- `list_projects()` - list all project directories
-- `list_project_content(project)` - list files within a project
-- `create_project(project)` - create new project directory
-
-**Knowledge operations**:
-- `list_knowledge_guides()` - list all knowledge guides (markdown files only, alphabetically sorted)
-
-No delete/move operations. Read and write handle file modifications.
+No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
 
 ## Code Style
 
@@ -126,38 +100,24 @@ Non-negotiable conventions:
 
 ## Deployment
 
-Docker only. No native installation docs because Docker handles dependencies and permissions cleanly.
+Docker only. No native installation because Docker handles dependencies and permissions cleanly.
 
-Build:
-```bash
-./build.sh
-```
+**Why Docker-only**:
+- User permissions map cleanly via --user flag (prevents file ownership issues)
+- No Python environment management
+- Same deployment for Desktop and Code
+- GitHub Actions builds/publishes to GHCR automatically
 
-Configure Claude Desktop:
-```json
-{
-  "mcpServers": {
-    "obsidian": {
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "--user", "1000:1000",
-        "-v", "/path/to/vault:/vault",
-        "-e", "OBSIDIAN_VAULT_PATH=/vault",
-        "-e", "TZ=America/New_York",
-        "-e", "LOG_LEVEL=info",
-        "obsidian-mcp:local"
-      ]
-    }
-  }
-}
-```
+**Image naming**:
+- Production: `ghcr.io/vicgarcia/obsidian-mcp:latest`
+- Local dev: `ghcr.io/vicgarcia/obsidian-mcp:local` (via ./build.sh)
 
-User must set:
-- Their actual user:group IDs (from `id` command)
-- Absolute vault path
-- Their timezone
-- Optional: LOG_LEVEL (debug for verbose logging, info for normal)
+**Setup details**: See README.md for full Claude Desktop and Claude Code configuration commands.
+
+**Environment variables**:
+- `TZ` (required) - timezone for journal date calculations (e.g., America/New_York)
+- `LOG_LEVEL` (optional) - debug or info, defaults to info
+- `OBSIDIAN_VAULT_PATH` - set internally to /vault, not needed in user config
 
 ## Security
 
@@ -254,7 +214,7 @@ Current scope: journal entries + project tracking + knowledge guides. No templat
 
 **Documentation updated**: README.md expanded with project workflow examples and vault structure. CLAUDE.md updated with logging details.
 
-### Current Session
+### Session 1 (Knowledge Management)
 
 **Knowledge management added**: User requested knowledge guide support for comprehensive topic documentation.
 
@@ -286,5 +246,18 @@ Current scope: journal entries + project tracking + knowledge guides. No templat
 - Flat structure enforced (no subdirectories)
 - Descriptive filenames (no metadata, no frontmatter parsing)
 - Consistent with existing patterns (same approach as projects)
+
+### Session 2 (Claude Code Support)
+
+**Claude Code deployment added**: User requested CLI setup instructions for Claude Code alongside existing Claude Desktop docs.
+
+**Documentation updated**:
+- README.md: Added Claude Code CLI setup section with `claude mcp add` command, uses `$(id -u):$(id -g)` for automatic user ID injection
+- CLAUDE.md: Updated deployment section to include both Desktop and Code setup, clarified GHCR image usage, removed outdated OBSIDIAN_VAULT_PATH reference (not needed)
+
+**Changes aligned**:
+- Both README and CLAUDE.md now reference `ghcr.io/vicgarcia/obsidian-mcp:latest` as production image
+- Local builds create `ghcr.io/vicgarcia/obsidian-mcp:local` tag
+- Claude Code CLI simplifies user ID handling vs manual Desktop config
 
 That's it. Simple project, simple rules.
