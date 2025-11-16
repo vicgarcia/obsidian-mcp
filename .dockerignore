@@ -1,0 +1,7 @@
+.claude
+.pytest*
+.github
+.venv
+CLAUDE.md
+Dockerfile
+README.md

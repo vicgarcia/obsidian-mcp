@@ -7,3 +7,6 @@ wheels/
 
 .venv
 venv
+
+.claude
+.pytest*
