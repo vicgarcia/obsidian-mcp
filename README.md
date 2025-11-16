@@ -14,21 +14,21 @@ vault/
 │       └── 10/
 │           └── 2025-10-06.md
 ├── projects/
-│   ├── home-automation/
+│   ├── home automation/
 │   │   ├── requirements.md
 │   │   ├── architecture.md
-│   │   └── device-list.md
-│   ├── blog-redesign/
+│   │   └── device list.md
+│   ├── blog redesign/
 │   │   ├── design.md
-│   │   └── content-structure.md
-│   └── obsidian-mcp/
+│   │   └── content structure.md
+│   └── obsidian mcp/
 │       ├── roadmap.md
-│       └── design-decisions.md
+│       └── design decisions.md
 └── knowledge/
-    ├── python-asyncio.md
-    ├── docker-networking.md
-    ├── git-workflows.md
-    └── kubernetes-basics.md
+    ├── python asyncio.md
+    ├── docker networking.md
+    ├── git workflows.md
+    └── kubernetes basics.md
 ```
 
 ## setup
@@ -108,7 +108,7 @@ claude can help maintain comprehensive topic guides:
 - create new guides on specific topics
 - update and expand existing documentation
 
-knowledge guides use descriptive filenames (e.g., `python-asyncio.md`, `docker-networking.md`) and live in a flat directory structure for easy discovery.
+knowledge guides use descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`) and live in a flat directory structure for easy discovery.
 
 #### available tools
 

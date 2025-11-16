@@ -35,9 +35,9 @@ See README.md for vault structure diagram.
 
 **Journal**: `journal/YYYY/MM/YYYY-MM-DD.md` - month always two digits (01-12), rigid by design for predictable date queries.
 
-**Projects**: `projects/project-name/` - flat hierarchy, no nesting.
+**Projects**: `projects/project name/` - flat hierarchy, no nesting, use spaces instead of hyphens in names (e.g., `home automation/`, `blog redesign/`).
 
-**Knowledge**: `knowledge/topic-name.md` - flat structure, descriptive filenames (e.g., `python-asyncio.md`), no metadata/frontmatter.
+**Knowledge**: `knowledge/topic name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`), no metadata/frontmatter.
 
 ### Simplicity Over Features
 
