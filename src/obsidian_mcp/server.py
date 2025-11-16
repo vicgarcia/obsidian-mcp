@@ -316,8 +316,8 @@ def list_knowledge_guides() -> List[Dict[str, str]]:
     List all knowledge guides (markdown files in the knowledge directory).
 
     Knowledge guides are complete, standalone documentation on specific topics.
-    Use descriptive filenames that clearly indicate content (e.g., 'python-asyncio.md',
-    'docker-networking.md', 'git-workflows.md').
+    Use descriptive filenames that clearly indicate content (e.g., 'python asyncio.md',
+    'docker networking.md', 'git workflows.md'). It is prefered to use spaces in filenames.
 
     The knowledge directory uses a flat structure - all guides live directly in
     knowledge/*.md with no subdirectories. This keeps discovery simple.
