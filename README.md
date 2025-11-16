@@ -41,9 +41,9 @@ this mcp server runs in a docker container for use with claude desktop.
 docker pull ghcr.io/vicgarcia/obsidian-mcp:latest
 ```
 
-#### configure claude desktop
+#### configure claude desktop or claude code
 
-add this to your claude desktop mcp settings:
+**claude desktop**: add this to your mcp settings:
 
 ```json
 {
@@ -60,6 +60,17 @@ add this to your claude desktop mcp settings:
     }
   }
 }
+```
+
+**claude code**: use the cli to add the server:
+
+```bash
+claude mcp add --scope user --transport stdio obsidian -- \
+  docker run --rm -i \
+  -u $(id -u):$(id -g) \
+  -v /path/to/your/vault:/vault \
+  -e TZ=America/New_York \
+  ghcr.io/vicgarcia/obsidian-mcp:latest
 ```
 
 replace the following:
@@ -156,10 +167,10 @@ tests/
 #### building docker image locally
 
 ```bash
-docker build -t obsidian-mcp:local .
+docker build -t ghcr.io/vicgarcia/obsidian-mcp:local .
 ```
 
-to use the local build in claude desktop, update your mcp settings to use `obsidian-mcp:local` instead of `ghcr.io/vicgarcia/obsidian-mcp:latest`:
+to use the local build in claude desktop, update your mcp settings
 
 ```json
 {
@@ -171,7 +182,7 @@ to use the local build in claude desktop, update your mcp settings to use `obsid
         "--user", "1000:1000",
         "-v", "/path/to/your/vault:/vault",
         "-e", "TZ=America/New_York",
-        "obsidian-mcp:local"
+        "ghcr.io/vicgarcia/obsidian-mcp:local"
       ]
     }
   }
