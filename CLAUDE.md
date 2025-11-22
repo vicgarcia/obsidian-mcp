@@ -82,8 +82,12 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 **Logging**: Comprehensive logging throughout using Python's logging module. LOG_LEVEL environment variable (debug/info) controls verbosity. All exceptions logged with full stack traces. All log messages use lowercase except proper names.
 
-## MCP Tools (8 total)
+## MCP Interface
 
+**Prompts (1 total)**
+- `daily_notes_session` - Interactive daily note-taking workflow that announces today's date, collects notes with follow-up questions, and generates comprehensive journal entries
+
+**Tools (8 total)**
 2 general file operations + 2 journal + 3 project + 1 knowledge = 8 tools total.
 
 No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
