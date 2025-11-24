@@ -112,13 +112,15 @@ knowledge guides use descriptive filenames with spaces in lowercase (e.g., `pyth
 
 #### available tools
 
-**file operations**
+**basic operations**
 - `read_file(file_path)` - read any file in the vault
 - `write_file(file_path, content)` - write to any file in the vault
+- `get_current_date()` - get the current date in YYYY-MM-DD format
 
 **journal operations**
 - `list_todays_journal_entry()` - get the path for today's entry
 - `list_journal_entries_by_year_and_month(year, month)` - list entries for a specific month
+- `start_daily_notes_session()` - start an interactive session for daily note-taking
 
 **project operations**
 - `list_projects()` - list all project directories
@@ -126,7 +128,7 @@ knowledge guides use descriptive filenames with spaces in lowercase (e.g., `pyth
 - `create_project(project)` - create a new project directory
 
 **knowledge operations**
-- `list_knowledge_guides()` - list all knowledge guides
+- `list_knowledge_content()` - list all knowledge guides
 
 #### security
 

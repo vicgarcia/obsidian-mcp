@@ -12,7 +12,7 @@ The server provides Claude Desktop and Claude Code with access to:
 
 ## Current Status
 
-Production ready. 8 tools implemented, 45 tests passing, Docker deployment configured.
+Production ready. 10 tools implemented, 45 tests passing, Docker deployment configured.
 
 This is feature-complete by design. The goal was simplicity, not comprehensiveness.
 
@@ -82,9 +82,10 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 **Logging**: Comprehensive logging throughout using Python's logging module. LOG_LEVEL environment variable (debug/info) controls verbosity. All exceptions logged with full stack traces. All log messages use lowercase except proper names.
 
-## MCP Tools (8 total)
+## MCP Interface
 
-2 general file operations + 2 journal + 3 project + 1 knowledge = 8 tools total.
+**Tools (10 total)**
+2 general file operations + 4 journal + 3 project + 1 knowledge = 10 tools total.
 
 No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
 
@@ -129,11 +130,11 @@ Docker only. No native installation because Docker handles dependencies and perm
 
 ## Testing
 
-45 tests covering:
+46 tests covering:
 - Input validation (models) - 14 tests
 - Path operations (utils) - 11 tests
 - File operations (e2e) - 6 tests
-- Journal tools (e2e) - 2 tests
+- Journal tools (e2e) - 3 tests
 - Project tools (e2e) - 5 tests
 - Knowledge tools (e2e) - 5 tests
 - Integration workflows (e2e) - 2 tests
@@ -170,7 +171,7 @@ Current scope: journal entries + project tracking + knowledge guides. No templat
 2. Code style rules are non-negotiable
 3. Keep dependencies minimal
 4. Docker is the deployment path
-5. Don't break the 8-tool interface
+5. Don't break the 10-tool interface
 
 ## Entry Points
 

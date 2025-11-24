@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
@@ -24,6 +25,7 @@ from .utils import (
 
 import logging
 logger = logging.getLogger(__name__)
+
 
 mcp = FastMCP("Obsidian MCP Server")
 
@@ -121,6 +123,19 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
+def get_current_date() -> str:
+    ''' Get the current date in YYYY-MM-DD format. '''
+    try:
+        logger.debug("get_current_date called")
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"current date: {current_date}")
+        return current_date
+    except Exception as e:
+        logger.exception(f"unexpected error getting current date: {e}")
+        return create_error_response(f"Unexpected error getting current date: {e}")
+
+
+@mcp.tool()
 def list_todays_journal_entry() -> Dict[str, Any]:
     '''
     Get today's journal entry path in the format journal/YYYY/MM/YYYY-MM-DD.md.
@@ -142,19 +157,116 @@ def list_todays_journal_entry() -> Dict[str, Any]:
         logger.debug("list_todays_journal_entry called")
         journal_path = get_today_journal_path()
         logger.info(f"today's journal path: {journal_path}")
-
         # return the path info regardless of whether file exists
         return {
             "path": journal_path,
             "name": Path(journal_path).name
         }
-
     except ValueError as e:
         logger.error(f"value error getting today's journal entry: {e}")
         return create_error_response(str(e))
     except Exception as e:
         logger.exception(f"unexpected error getting today's journal entry: {e}")
         return create_error_response(f"Unexpected error getting today's journal entry: {e}")
+
+
+DAILY_NOTES_PROMPT = '''
+you are assisting with a daily notes session, your role:
+
+help capture the user's day through interactive note-taking.
+be engaged and curious.
+help them think deeper about their work.
+
+session flow:
+
+1. announce the date
+
+announce that today is {today}.
+ask if this is the correct date for this session.
+assume that no response is confirmation of the date.
+if they're catching up on a previous day or started after midnight, they should tell you the correct date.
+remember this date for creating the journal entry later.
+
+2. collect notes throughout the day
+
+as the user shares updates:
+- acknowledge what they shared
+- ask 2-3 follow-up questions to help them elaborate
+- focus on context, challenges, decisions, outcomes
+- keep questions natural and conversational
+- don't force responses, move on when they share next update
+- accumulate context from everything shared
+
+good follow-up questions probe:
+- why they chose a particular approach
+- what challenges or blockers they hit
+- what they learned or would do differently
+- how it connects to larger goals
+- technical details worth remembering
+
+3. generate the journal entry
+
+when the user asks to update their journal
+(e.g. "update my journal", "write today's entry", "save notes"):
+
+use the session date from step 1.
+
+check if entry exists:
+- use list_todays_journal_entry() to get today's path
+- if session date differs from today, construct path: journal/YYYY/MM/YYYY-MM-DD.md
+- use read_file() to check existing content
+
+create or update the entry:
+
+format: narrative paragraphs, then --- separator, then freeform notes
+
+narrative section:
+- write 2-4 paragraphs in first person telling the story of the day
+- synthesize everything discussed into coherent narrative
+- focus on what was accomplished, challenges faced, decisions made, insights gained
+- include specific technical details where relevant
+- make it valuable to read months later
+- natural personal voice, not a status report
+
+separator: three dashes --- on their own line
+
+freeform notes section:
+- quick references, links, commands, snippets mentioned
+- ideas or todos that came up
+- anything worth preserving that doesn't fit narrative
+- use bullet points, code blocks, whatever makes sense
+
+if entry already exists:
+- read it first
+- preserve existing narrative, add to it rather than replace
+- merge or append to freeform notes
+- never include header with date, obsidian handles this
+
+use write_file() with the journal path to save.
+
+guidelines:
+
+- be conversational and engaged
+- remember everything for the final journal entry
+- questions are optional prompts for deeper thinking
+- synthesize everything into cohesive story
+- make entries valuable months later
+- focus on why and how, not just what
+'''
+
+@mcp.tool()
+def start_daily_notes_session() -> str:
+    '''
+    Start a daily notes session to track the day's activities and progress.
+
+    Initiates an interactive workflow that announces the date, collects notes with
+    follow-up questions, and generates journal entries.
+
+    Returns:
+        Prompt instructions for the daily notes workflow
+    '''
+    today = datetime.now().strftime("%Y-%m-%d")
+    return DAILY_NOTES_PROMPT.format(today=today)
 
 
 @mcp.tool()
@@ -206,6 +318,10 @@ def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[s
 def list_projects() -> List[Dict[str, str]]:
     '''
     List all projects (subdirectories in the projects directory).
+
+    Projects are simple directory-based organization for ongoing work. Use spaces in
+    project names (e.g., "home automation", "blog redesign") and organize related
+    documentation within each project directory.
 
     Returns:
         List of project directories with metadata
@@ -311,22 +427,19 @@ def create_project(project: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def list_knowledge_guides() -> List[Dict[str, str]]:
+def list_knowledge_content() -> List[Dict[str, str]]:
     '''
-    List all knowledge guides (markdown files in the knowledge directory).
+    List all markdown files in the knowledge directory.
 
-    Knowledge guides are complete, standalone documentation on specific topics.
-    Use descriptive filenames that clearly indicate content (e.g., 'python asyncio.md',
-    'docker networking.md', 'git workflows.md'). It is prefered to use spaces in filenames.
-
-    The knowledge directory uses a flat structure - all guides live directly in
-    knowledge/*.md with no subdirectories. This keeps discovery simple.
+    Knowledge guides are comprehensive, standalone documentation on specific topics. Use
+    descriptive filenames with spaces in lowercase (e.g., "python asyncio.md", "docker
+    networking.md") in a flat directory structure for easy discovery.
 
     Returns:
-        List of guide files with metadata, sorted alphabetically
+        List of markdown files with metadata
     '''
     try:
-        logger.debug("list_knowledge_guides called")
+        logger.debug("list_knowledge_content called")
         vault_base = get_vault_base()
         knowledge_dir = vault_base / "knowledge"
 
@@ -336,19 +449,20 @@ def list_knowledge_guides() -> List[Dict[str, str]]:
         # filter to markdown files only
         guides = [f for f in files if Path(f["path"]).suffix == ".md"]
 
-        logger.info(f"found {len(guides)} knowledge guides")
+        logger.info(f"found {len(guides)} knowledge files")
         return guides
 
     except ValueError as e:
-        logger.error(f"value error listing knowledge guides: {e}")
+        logger.error(f"value error listing knowledge content: {e}")
         return [create_error_response(str(e))]
     except Exception as e:
-        logger.exception(f"unexpected error listing knowledge guides: {e}")
-        return [create_error_response(f"Unexpected error listing knowledge guides: {e}")]
+        logger.exception(f"unexpected error listing knowledge content: {e}")
+        return [create_error_response(f"Unexpected error listing knowledge content: {e}")]
 
 
 def run():
     ''' Main entry point for the MCP server. '''
+
     # configure logging
     logging.basicConfig(
         level=logging.DEBUG if os.getenv('LOG_LEVEL', 'info').lower() == 'debug' else logging.INFO,
@@ -368,13 +482,11 @@ def run():
             logger.error(f"vault directory does not exist: {vault_base}")
             print(f"Error: Vault directory does not exist: {vault_base}", file=sys.stderr)
             sys.exit(1)
-
         if not vault_base.is_dir():
             logger.error(f"vault path is not a directory: {vault_base}")
             print(f"Error: Vault path is not a directory: {vault_base}", file=sys.stderr)
             sys.exit(1)
 
-        logger.info("vault validation successful, starting server")
         # run the server
         mcp.run()
 
@@ -382,6 +494,7 @@ def run():
         logger.exception(f"configuration error: {e}")
         print(f"Configuration error: {e}", file=sys.stderr)
         sys.exit(1)
+
     except Exception as e:
         logger.exception(f"unexpected error: {e}")
         print(f"Unexpected error: {e}", file=sys.stderr)
