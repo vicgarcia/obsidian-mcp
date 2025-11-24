@@ -433,7 +433,7 @@ guidelines:
 - focus on why and how, not just what
 '''
 
-@mcp.prompt()
+@mcp.tool()
 def daily_notes_session() -> str:
     '''
     Start a daily notes session to track the day's activities and progress.
@@ -450,6 +450,7 @@ def daily_notes_session() -> str:
 
 def run():
     ''' Main entry point for the MCP server. '''
+
     # configure logging
     logging.basicConfig(
         level=logging.DEBUG if os.getenv('LOG_LEVEL', 'info').lower() == 'debug' else logging.INFO,
@@ -469,13 +470,11 @@ def run():
             logger.error(f"vault directory does not exist: {vault_base}")
             print(f"Error: Vault directory does not exist: {vault_base}", file=sys.stderr)
             sys.exit(1)
-
         if not vault_base.is_dir():
             logger.error(f"vault path is not a directory: {vault_base}")
             print(f"Error: Vault path is not a directory: {vault_base}", file=sys.stderr)
             sys.exit(1)
 
-        logger.info("vault validation successful, starting server")
         # run the server
         mcp.run()
 
@@ -483,6 +482,7 @@ def run():
         logger.exception(f"configuration error: {e}")
         print(f"Configuration error: {e}", file=sys.stderr)
         sys.exit(1)
+
     except Exception as e:
         logger.exception(f"unexpected error: {e}")
         print(f"Unexpected error: {e}", file=sys.stderr)
