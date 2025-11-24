@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from obsidian_mcp.server import read_file, write_file, list_projects, list_project_content, create_project, list_knowledge_guides
+from obsidian_mcp.server import read_file, write_file, list_projects, list_project_content, create_project, list_knowledge_content
 
 
 class TestFileOperations:
@@ -167,7 +167,7 @@ class TestProjectTools:
 class TestKnowledgeTools:
     ''' test knowledge management tools. '''
 
-    def test_list_knowledge_guides_empty(self, vault_path):
+    def test_list_knowledge_content_empty(self, vault_path):
         ''' test listing knowledge guides when directory is empty. '''
         # ensure knowledge directory exists but is empty
         knowledge_dir = vault_path / "knowledge"
@@ -178,14 +178,14 @@ class TestKnowledgeTools:
             if existing_file.is_file():
                 existing_file.unlink()
 
-        result = list_knowledge_guides()
+        result = list_knowledge_content()
 
         assert isinstance(result, list)
         assert len(result) == 0
 
-    def test_list_knowledge_guides_with_content(self, setup_knowledge_guides):
+    def test_list_knowledge_content_with_content(self, setup_knowledge_guides):
         ''' test listing knowledge guides when guides exist. '''
-        result = list_knowledge_guides()
+        result = list_knowledge_content()
 
         assert isinstance(result, list)
         assert len(result) == 3
@@ -199,7 +199,7 @@ class TestKnowledgeTools:
         guide_paths = [g["path"] for g in result]
         assert "knowledge/python-asyncio.md" in guide_paths
 
-    def test_list_knowledge_guides_filters_markdown(self, vault_path):
+    def test_list_knowledge_content_filters_markdown(self, vault_path):
         ''' test that non-markdown files are filtered out. '''
         knowledge_dir = vault_path / "knowledge"
         knowledge_dir.mkdir(parents=True, exist_ok=True)
@@ -214,7 +214,7 @@ class TestKnowledgeTools:
         (knowledge_dir / "image.png").write_bytes(b"fake image data")
         (knowledge_dir / "data.json").write_text('{"key": "value"}')
 
-        result = list_knowledge_guides()
+        result = list_knowledge_content()
 
         assert len(result) == 1
         assert result[0]["name"] == "guide.md"
@@ -248,7 +248,7 @@ class TestKnowledgeTools:
         assert guide_file.read_text() == content
 
         # verify it appears in listing
-        guides = list_knowledge_guides()
+        guides = list_knowledge_content()
         guide_names = [g["name"] for g in guides]
         assert "kubernetes-basics.md" in guide_names
 

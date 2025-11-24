@@ -130,7 +130,7 @@ knowledge guides use descriptive filenames with spaces in lowercase (e.g., `pyth
 - `create_project(project)` - create a new project directory
 
 **knowledge operations**
-- `list_knowledge_guides()` - list all knowledge guides
+- `list_knowledge_content()` - list all knowledge guides
 
 #### security
 

@@ -313,22 +313,15 @@ def create_project(project: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def list_knowledge_guides() -> List[Dict[str, str]]:
+def list_knowledge_content() -> List[Dict[str, str]]:
     '''
-    List all knowledge guides (markdown files in the knowledge directory).
-
-    Knowledge guides are complete, standalone documentation on specific topics.
-    Use descriptive filenames that clearly indicate content (e.g., 'python asyncio.md',
-    'docker networking.md', 'git workflows.md'). It is prefered to use spaces in filenames.
-
-    The knowledge directory uses a flat structure - all guides live directly in
-    knowledge/*.md with no subdirectories. This keeps discovery simple.
+    List all markdown files in the knowledge directory.
 
     Returns:
-        List of guide files with metadata, sorted alphabetically
+        List of markdown files with metadata
     '''
     try:
-        logger.debug("list_knowledge_guides called")
+        logger.debug("list_knowledge_content called")
         vault_base = get_vault_base()
         knowledge_dir = vault_base / "knowledge"
 
@@ -338,15 +331,15 @@ def list_knowledge_guides() -> List[Dict[str, str]]:
         # filter to markdown files only
         guides = [f for f in files if Path(f["path"]).suffix == ".md"]
 
-        logger.info(f"found {len(guides)} knowledge guides")
+        logger.info(f"found {len(guides)} knowledge files")
         return guides
 
     except ValueError as e:
-        logger.error(f"value error listing knowledge guides: {e}")
+        logger.error(f"value error listing knowledge content: {e}")
         return [create_error_response(str(e))]
     except Exception as e:
-        logger.exception(f"unexpected error listing knowledge guides: {e}")
-        return [create_error_response(f"Unexpected error listing knowledge guides: {e}")]
+        logger.exception(f"unexpected error listing knowledge content: {e}")
+        return [create_error_response(f"Unexpected error listing knowledge content: {e}")]
 
 
 DAILY_NOTES_PROMPT = '''
