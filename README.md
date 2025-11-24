@@ -110,15 +110,6 @@ claude can help maintain comprehensive topic guides:
 
 knowledge guides use descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`) and live in a flat directory structure for easy discovery.
 
-#### available prompts
-
-**daily notes session**
-- `daily_notes_session` - start an interactive session for daily note-taking
-  - announces today's date and confirms with user
-  - collects notes throughout the day with thoughtful follow-up questions
-  - generates comprehensive journal entries when you're ready
-  - handles catching up on previous days through conversation
-
 #### available tools
 
 **file operations**
@@ -128,6 +119,10 @@ knowledge guides use descriptive filenames with spaces in lowercase (e.g., `pyth
 **journal operations**
 - `list_todays_journal_entry()` - get the path for today's entry
 - `list_journal_entries_by_year_and_month(year, month)` - list entries for a specific month
+- `start_daily_notes_session()` - start an interactive session for daily note-taking
+  - announces today's date and confirms with user
+  - collects notes throughout the day with thoughtful follow-up questions
+  - generates comprehensive journal entries at the end of the day
 
 **project operations**
 - `list_projects()` - list all project directories

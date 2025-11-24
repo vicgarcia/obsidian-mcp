@@ -12,7 +12,7 @@ The server provides Claude Desktop and Claude Code with access to:
 
 ## Current Status
 
-Production ready. 8 tools implemented, 45 tests passing, Docker deployment configured.
+Production ready. 9 tools implemented, 45 tests passing, Docker deployment configured.
 
 This is feature-complete by design. The goal was simplicity, not comprehensiveness.
 
@@ -84,11 +84,8 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 ## MCP Interface
 
-**Prompts (1 total)**
-- `daily_notes_session` - Interactive daily note-taking workflow that announces today's date, collects notes with follow-up questions, and generates comprehensive journal entries
-
-**Tools (8 total)**
-2 general file operations + 2 journal + 3 project + 1 knowledge = 8 tools total.
+**Tools (9 total)**
+2 general file operations + 2 journal + 3 project + 1 knowledge + 1 daily notes session = 9 tools total.
 
 No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
 
@@ -174,7 +171,7 @@ Current scope: journal entries + project tracking + knowledge guides. No templat
 2. Code style rules are non-negotiable
 3. Keep dependencies minimal
 4. Docker is the deployment path
-5. Don't break the 8-tool interface
+5. Don't break the 9-tool interface
 
 ## Entry Points
 

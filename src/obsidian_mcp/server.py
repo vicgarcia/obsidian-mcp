@@ -434,7 +434,7 @@ guidelines:
 '''
 
 @mcp.tool()
-def daily_notes_session() -> str:
+def start_daily_notes_session() -> str:
     '''
     Start a daily notes session to track the day's activities and progress.
 
