@@ -84,8 +84,8 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 ## MCP Interface
 
-**Tools (9 total)**
-2 general file operations + 2 journal + 3 project + 1 knowledge + 1 daily notes session = 9 tools total.
+**Tools (10 total)**
+2 general file operations + 4 journal + 3 project + 1 knowledge = 10 tools total.
 
 No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
 
@@ -130,11 +130,11 @@ Docker only. No native installation because Docker handles dependencies and perm
 
 ## Testing
 
-45 tests covering:
+46 tests covering:
 - Input validation (models) - 14 tests
 - Path operations (utils) - 11 tests
 - File operations (e2e) - 6 tests
-- Journal tools (e2e) - 2 tests
+- Journal tools (e2e) - 3 tests
 - Project tools (e2e) - 5 tests
 - Knowledge tools (e2e) - 5 tests
 - Integration workflows (e2e) - 2 tests
@@ -171,7 +171,7 @@ Current scope: journal entries + project tracking + knowledge guides. No templat
 2. Code style rules are non-negotiable
 3. Keep dependencies minimal
 4. Docker is the deployment path
-5. Don't break the 9-tool interface
+5. Don't break the 10-tool interface
 
 ## Entry Points
 

@@ -1,7 +1,8 @@
 import pytest
 from pathlib import Path
+from datetime import datetime
 
-from obsidian_mcp.server import read_file, write_file, list_projects, list_project_content, create_project, list_knowledge_content
+from obsidian_mcp.server import read_file, write_file, get_current_date, list_projects, list_project_content, create_project, list_knowledge_content
 
 
 class TestFileOperations:
@@ -63,6 +64,20 @@ class TestFileOperations:
 
 class TestJournalTools:
     ''' test journal-related tools. '''
+
+    def test_get_current_date(self):
+        ''' test getting current date. '''
+        result = get_current_date()
+
+        # verify format is YYYY-MM-DD
+        assert isinstance(result, str)
+        assert len(result) == 10
+        assert result[4] == "-"
+        assert result[7] == "-"
+
+        # verify it matches today's date
+        expected_date = datetime.now().strftime("%Y-%m-%d")
+        assert result == expected_date
 
     def test_list_todays_journal_entry(self):
         ''' test getting today's journal entry path. '''
