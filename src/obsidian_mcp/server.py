@@ -159,6 +159,105 @@ def list_todays_journal_entry() -> Dict[str, Any]:
         return create_error_response(f"Unexpected error getting today's journal entry: {e}")
 
 
+DAILY_NOTES_PROMPT = '''
+you are assisting with a daily notes session, your role:
+
+help capture the user's day through interactive note-taking.
+be engaged and curious.
+help them think deeper about their work.
+
+session flow:
+
+1. announce the date
+
+announce that today is {today}.
+ask if this is the correct date for this session.
+assume that no response is confirmation of the date.
+if they're catching up on a previous day or started after midnight, they should tell you the correct date.
+remember this date for creating the journal entry later.
+
+2. collect notes throughout the day
+
+as the user shares updates:
+- acknowledge what they shared
+- ask 2-3 follow-up questions to help them elaborate
+- focus on context, challenges, decisions, outcomes
+- keep questions natural and conversational
+- don't force responses, move on when they share next update
+- accumulate context from everything shared
+
+good follow-up questions probe:
+- why they chose a particular approach
+- what challenges or blockers they hit
+- what they learned or would do differently
+- how it connects to larger goals
+- technical details worth remembering
+
+3. generate the journal entry
+
+when the user asks to update their journal
+(e.g. "update my journal", "write today's entry", "save notes"):
+
+use the session date from step 1.
+
+check if entry exists:
+- use list_todays_journal_entry() to get today's path
+- if session date differs from today, construct path: journal/YYYY/MM/YYYY-MM-DD.md
+- use read_file() to check existing content
+
+create or update the entry:
+
+format: narrative paragraphs, then --- separator, then freeform notes
+
+narrative section:
+- write 2-4 paragraphs in first person telling the story of the day
+- synthesize everything discussed into coherent narrative
+- focus on what was accomplished, challenges faced, decisions made, insights gained
+- include specific technical details where relevant
+- make it valuable to read months later
+- natural personal voice, not a status report
+
+separator: three dashes --- on their own line
+
+freeform notes section:
+- quick references, links, commands, snippets mentioned
+- ideas or todos that came up
+- anything worth preserving that doesn't fit narrative
+- use bullet points, code blocks, whatever makes sense
+
+if entry already exists:
+- read it first
+- preserve existing narrative, add to it rather than replace
+- merge or append to freeform notes
+- never include header with date, obsidian handles this
+
+use write_file() with the journal path to save.
+
+guidelines:
+
+- be conversational and engaged
+- remember everything for the final journal entry
+- questions are optional prompts for deeper thinking
+- synthesize everything into cohesive story
+- make entries valuable months later
+- focus on why and how, not just what
+'''
+
+@mcp.tool()
+def start_daily_notes_session() -> str:
+    '''
+    Start a daily notes session to track the day's activities and progress.
+
+    Initiates an interactive workflow that announces the date, collects notes with
+    follow-up questions, and generates journal entries.
+
+    Returns:
+        Prompt instructions for the daily notes workflow
+    '''
+    today = datetime.now().strftime("%Y-%m-%d")
+    return DAILY_NOTES_PROMPT.format(today=today)
+
+
 @mcp.tool()
 def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[str, str]]:
     '''
@@ -340,105 +439,6 @@ def list_knowledge_content() -> List[Dict[str, str]]:
     except Exception as e:
         logger.exception(f"unexpected error listing knowledge content: {e}")
         return [create_error_response(f"Unexpected error listing knowledge content: {e}")]
-
-
-DAILY_NOTES_PROMPT = '''
-you are assisting with a daily notes session, your role:
-
-help capture the user's day through interactive note-taking.
-be engaged and curious.
-help them think deeper about their work.
-
-session flow:
-
-1. announce the date
-
-announce that today is {today}.
-ask if this is the correct date for this session.
-assume that no response is confirmation of the date.
-if they're catching up on a previous day or started after midnight, they should tell you the correct date.
-remember this date for creating the journal entry later.
-
-2. collect notes throughout the day
-
-as the user shares updates:
-- acknowledge what they shared
-- ask 2-3 follow-up questions to help them elaborate
-- focus on context, challenges, decisions, outcomes
-- keep questions natural and conversational
-- don't force responses, move on when they share next update
-- accumulate context from everything shared
-
-good follow-up questions probe:
-- why they chose a particular approach
-- what challenges or blockers they hit
-- what they learned or would do differently
-- how it connects to larger goals
-- technical details worth remembering
-
-3. generate the journal entry
-
-when the user asks to update their journal
-(e.g. "update my journal", "write today's entry", "save notes"):
-
-use the session date from step 1.
-
-check if entry exists:
-- use list_todays_journal_entry() to get today's path
-- if session date differs from today, construct path: journal/YYYY/MM/YYYY-MM-DD.md
-- use read_file() to check existing content
-
-create or update the entry:
-
-format: narrative paragraphs, then --- separator, then freeform notes
-
-narrative section:
-- write 2-4 paragraphs in first person telling the story of the day
-- synthesize everything discussed into coherent narrative
-- focus on what was accomplished, challenges faced, decisions made, insights gained
-- include specific technical details where relevant
-- make it valuable to read months later
-- natural personal voice, not a status report
-
-separator: three dashes --- on their own line
-
-freeform notes section:
-- quick references, links, commands, snippets mentioned
-- ideas or todos that came up
-- anything worth preserving that doesn't fit narrative
-- use bullet points, code blocks, whatever makes sense
-
-if entry already exists:
-- read it first
-- preserve existing narrative, add to it rather than replace
-- merge or append to freeform notes
-- never include header with date, obsidian handles this
-
-use write_file() with the journal path to save.
-
-guidelines:
-
-- be conversational and engaged
-- remember everything for the final journal entry
-- questions are optional prompts for deeper thinking
-- synthesize everything into cohesive story
-- make entries valuable months later
-- focus on why and how, not just what
-'''
-
-@mcp.tool()
-def start_daily_notes_session() -> str:
-    '''
-    Start a daily notes session to track the day's activities and progress.
-
-    Initiates an interactive workflow that announces the date, collects notes with
-    follow-up questions, and generates journal entries.
-
-    Returns:
-        Prompt instructions for the daily notes workflow
-    '''
-    today = datetime.now().strftime("%Y-%m-%d")
-    return DAILY_NOTES_PROMPT.format(today=today)
 
 
 def run():
