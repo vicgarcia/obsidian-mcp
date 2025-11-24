@@ -123,6 +123,19 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
+def get_current_date() -> str:
+    ''' Get the current date in YYYY-MM-DD format. '''
+    try:
+        logger.debug("get_current_date called")
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"current date: {current_date}")
+        return current_date
+    except Exception as e:
+        logger.exception(f"unexpected error getting current date: {e}")
+        return create_error_response(f"Unexpected error getting current date: {e}")
+
+
+@mcp.tool()
 def list_todays_journal_entry() -> Dict[str, Any]:
     '''
     Get today's journal entry path in the format journal/YYYY/MM/YYYY-MM-DD.md.
