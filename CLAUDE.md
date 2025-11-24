@@ -12,7 +12,7 @@ The server provides Claude Desktop and Claude Code with access to:
 
 ## Current Status
 
-Production ready. 9 tools implemented, 45 tests passing, Docker deployment configured.
+Production ready. 10 tools implemented, 45 tests passing, Docker deployment configured.
 
 This is feature-complete by design. The goal was simplicity, not comprehensiveness.
 
