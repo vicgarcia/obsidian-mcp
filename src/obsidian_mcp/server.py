@@ -157,13 +157,11 @@ def list_todays_journal_entry() -> Dict[str, Any]:
         logger.debug("list_todays_journal_entry called")
         journal_path = get_today_journal_path()
         logger.info(f"today's journal path: {journal_path}")
-
         # return the path info regardless of whether file exists
         return {
             "path": journal_path,
             "name": Path(journal_path).name
         }
-
     except ValueError as e:
         logger.error(f"value error getting today's journal entry: {e}")
         return create_error_response(str(e))
@@ -321,6 +319,10 @@ def list_projects() -> List[Dict[str, str]]:
     '''
     List all projects (subdirectories in the projects directory).
 
+    Projects are simple directory-based organization for ongoing work. Use spaces in
+    project names (e.g., "home automation", "blog redesign") and organize related
+    documentation within each project directory.
+
     Returns:
         List of project directories with metadata
     '''
@@ -428,6 +430,10 @@ def create_project(project: str) -> Dict[str, Any]:
 def list_knowledge_content() -> List[Dict[str, str]]:
     '''
     List all markdown files in the knowledge directory.
+
+    Knowledge guides are comprehensive, standalone documentation on specific topics. Use
+    descriptive filenames with spaces in lowercase (e.g., "python asyncio.md", "docker
+    networking.md") in a flat directory structure for easy discovery.
 
     Returns:
         List of markdown files with metadata
