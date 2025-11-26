@@ -123,13 +123,23 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def get_current_date() -> str:
-    ''' Get the current date in YYYY-MM-DD format. '''
+def get_current_date() -> Dict[str, str]:
+    '''
+    Get the current date in both human-readable and YYYY-MM-DD formats.
+
+    Returns:
+        Dictionary with date in YYYY-MM-DD format and human-readable format
+    '''
     try:
         logger.debug("get_current_date called")
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        logger.info(f"current date: {current_date}")
-        return current_date
+        now = datetime.now()
+        formatted_date = now.strftime("%Y-%m-%d")
+        human_date = now.strftime("%A %B %d, %Y")
+        logger.info(f"current date: {formatted_date} ({human_date})")
+        return {
+            "formatted": formatted_date,
+            "human": human_date
+        }
     except Exception as e:
         logger.exception(f"unexpected error getting current date: {e}")
         return create_error_response(f"Unexpected error getting current date: {e}")
@@ -265,7 +275,8 @@ def start_daily_notes_session() -> str:
     Returns:
         Prompt instructions for the daily notes workflow
     '''
-    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+    today = now.strftime("%A %B %d, %Y")
     return DAILY_NOTES_PROMPT.format(today=today)
 
 
