@@ -117,3 +117,30 @@ class ProjectInput(BaseModel):
             raise ValueError("Project name cannot contain '..'")
 
         return v
+
+
+class PromptInput(BaseModel):
+    ''' Input validation for prompt operations. '''
+    prompt: str
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, v: str) -> str:
+        ''' Validate prompt filename format. '''
+        if not v or v.strip() == "":
+            raise ValueError("Prompt name cannot be empty")
+
+        # remove leading/trailing whitespace
+        v = v.strip()
+
+        # check for invalid characters that could cause path issues
+        invalid_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|"]
+        for char in invalid_chars:
+            if char in v:
+                raise ValueError(f"Prompt name cannot contain '{char}'")
+
+        # prevent directory traversal
+        if ".." in v:
+            raise ValueError("Prompt name cannot contain '..'")
+
+        return v

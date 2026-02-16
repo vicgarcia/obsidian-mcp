@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from datetime import datetime
 
-from obsidian_mcp.server import read_file, write_file, get_current_date, list_projects, list_project_content, create_project, list_wiki
+from obsidian_mcp.server import read_file, write_file, get_current_date, list_projects, list_project_content, create_project, list_wiki, list_prompts, read_prompt
 
 
 class TestFileOperations:
@@ -269,6 +269,93 @@ class TestWikiTools:
 
         # cleanup
         article_file.unlink()
+
+
+class TestPromptTools:
+    ''' test prompt management tools. '''
+
+    def test_list_prompts_empty(self, vault_path):
+        ''' test listing prompts when directory is empty. '''
+        # ensure prompts directory exists but is empty
+        prompts_dir = vault_path / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+
+        # clean any existing files
+        for existing_file in prompts_dir.glob("*"):
+            if existing_file.is_file():
+                existing_file.unlink()
+
+        result = list_prompts()
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_list_prompts_with_content(self, setup_prompts):
+        ''' test listing prompts when prompts exist. '''
+        result = list_prompts()
+
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+        prompt_names = [p["name"] for p in result]
+        assert "code review assistant.md" in prompt_names
+        assert "documentation writer.md" in prompt_names
+        assert "test generator.md" in prompt_names
+
+        # verify paths are correct
+        prompt_paths = [p["path"] for p in result]
+        assert "prompts/code review assistant.md" in prompt_paths
+
+    def test_list_prompts_filters_markdown(self, vault_path):
+        ''' test that non-markdown files are filtered out. '''
+        prompts_dir = vault_path / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+
+        # clean any existing files
+        for existing_file in prompts_dir.glob("*"):
+            if existing_file.is_file():
+                existing_file.unlink()
+
+        # create markdown and non-markdown files
+        (prompts_dir / "agent.md").write_text("# Agent Prompt")
+        (prompts_dir / "config.json").write_text('{"key": "value"}')
+        (prompts_dir / "notes.txt").write_text("some notes")
+
+        result = list_prompts()
+
+        assert len(result) == 1
+        assert result[0]["name"] == "agent.md"
+
+        # cleanup
+        (prompts_dir / "agent.md").unlink()
+        (prompts_dir / "config.json").unlink()
+        (prompts_dir / "notes.txt").unlink()
+
+    def test_read_prompt(self, setup_prompts):
+        ''' test reading a prompt using read_prompt. '''
+        result = read_prompt("code review assistant.md")
+
+        assert "content" in result
+        assert "Code Review Assistant" in result["content"]
+        assert "review code" in result["content"]
+
+    def test_read_prompt_not_found(self, vault_path):
+        ''' test reading a non-existent prompt. '''
+        # ensure prompts directory exists
+        prompts_dir = vault_path / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+
+        result = read_prompt("nonexistent prompt.md")
+
+        assert "error" in result
+        assert "Prompt not found" in result["error"]
+
+    def test_read_prompt_path_traversal(self):
+        ''' test that path traversal is prevented in read_prompt. '''
+        result = read_prompt("../../../etc/passwd")
+
+        assert "error" in result
+        assert "Invalid input" in result["error"]
 
 
 class TestIntegration:

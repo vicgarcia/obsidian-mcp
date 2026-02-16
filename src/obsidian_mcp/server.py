@@ -11,6 +11,7 @@ from .models import (
     FileWriteInput,
     YearMonthInput,
     ProjectInput,
+    PromptInput,
 )
 from .utils import (
     get_vault_base,
@@ -469,6 +470,88 @@ def list_wiki() -> List[Dict[str, str]]:
     except Exception as e:
         logger.exception(f"unexpected error listing wiki: {e}")
         return [create_error_response(f"Unexpected error listing wiki: {e}")]
+
+
+@mcp.tool()
+def list_prompts() -> List[Dict[str, str]]:
+    '''
+    List all agent prompts in the prompts directory.
+
+    Agent prompts are markdown files intended to be used as system prompts or instructions
+    for LLM agents. Use descriptive filenames with spaces in lowercase (e.g., "code review
+    assistant.md", "documentation writer.md") in a flat directory structure.
+
+    Returns:
+        List of prompt files with metadata
+    '''
+    try:
+        logger.debug("list_prompts called")
+        vault_base = get_vault_base()
+        prompts_dir = vault_base / "prompts"
+
+        # get all files in the prompts directory (non-recursive)
+        files = list_files_in_directory(prompts_dir, vault_base, recursive=False)
+
+        # filter to markdown files only
+        prompts = [f for f in files if Path(f["path"]).suffix == ".md"]
+
+        logger.info(f"found {len(prompts)} agent prompts")
+        return prompts
+
+    except ValueError as e:
+        logger.error(f"value error listing prompts: {e}")
+        return [create_error_response(str(e))]
+    except Exception as e:
+        logger.exception(f"unexpected error listing prompts: {e}")
+        return [create_error_response(f"Unexpected error listing prompts: {e}")]
+
+
+@mcp.tool()
+def read_prompt(prompt: str) -> Dict[str, Any]:
+    '''
+    Read an agent prompt from the prompts directory.
+
+    Agent prompts are markdown files intended to be used as system prompts or instructions
+    for LLM agents. Pass the filename (e.g., "code review assistant.md") to read its content.
+
+    Args:
+        prompt: Filename of the prompt to read (e.g., "code review assistant.md")
+
+    Returns:
+        Dictionary with prompt content or error message
+    '''
+    try:
+        logger.debug(f"read_prompt called with: {prompt}")
+        # validate input
+        validated_input = PromptInput(prompt=prompt)
+
+        vault_base = get_vault_base()
+        prompt_path = vault_base / "prompts" / validated_input.prompt
+
+        # check if file exists
+        if not prompt_path.exists():
+            logger.warning(f"prompt not found: {validated_input.prompt}")
+            return create_error_response(f"Prompt not found: {validated_input.prompt}")
+
+        # check if it's actually a file
+        if not prompt_path.is_file():
+            logger.warning(f"prompt is not a file: {validated_input.prompt}")
+            return create_error_response(f"Prompt is not a file: {validated_input.prompt}")
+
+        # read file content
+        content = prompt_path.read_text(encoding='utf-8')
+        logger.info(f"successfully read prompt: {validated_input.prompt} ({len(content)} chars)")
+        return {"content": content}
+
+    except ValidationError as e:
+        logger.error(f"validation error reading prompt: {e}")
+        return create_error_response(f"Invalid input: {e}")
+    except ValueError as e:
+        logger.error(f"value error reading prompt: {e}")
+        return create_error_response(str(e))
+    except Exception as e:
+        logger.exception(f"unexpected error reading prompt: {e}")
+        return create_error_response(f"Unexpected error reading prompt: {e}")
 
 
 def run():

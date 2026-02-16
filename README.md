@@ -1,4 +1,4 @@
-this MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for three main workflows: daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, and a wiki for comprehensive markdown articles.
+this MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for four main workflows: daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, a wiki for comprehensive markdown articles, and agent prompts for LLM instructions.
 
 the server assumes your vault is organized like this:
 
@@ -24,11 +24,15 @@ vault/
 │   └── obsidian mcp/
 │       ├── roadmap.md
 │       └── design decisions.md
-└── wiki/
-    ├── python asyncio.md
-    ├── docker networking.md
-    ├── git workflows.md
-    └── kubernetes basics.md
+├── wiki/
+│   ├── python asyncio.md
+│   ├── docker networking.md
+│   ├── git workflows.md
+│   └── kubernetes basics.md
+└── prompts/
+    ├── code review assistant.md
+    ├── documentation writer.md
+    └── test generator.md
 ```
 
 ## setup
@@ -110,6 +114,14 @@ claude can help maintain comprehensive topic articles in the obsidian wiki:
 
 wiki articles use descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`) and live in a flat directory structure for easy discovery.
 
+#### prompts workflow
+
+claude can access agent prompts stored in your vault:
+- list all available prompts
+- read prompt content for use as agent instructions
+
+agent prompts are markdown files intended to be used as system prompts or instructions for LLM agents. use descriptive filenames with spaces in lowercase (e.g., `code review assistant.md`, `documentation writer.md`).
+
 #### available tools
 
 **basic operations**
@@ -129,6 +141,10 @@ wiki articles use descriptive filenames with spaces in lowercase (e.g., `python 
 
 **wiki operations**
 - `list_wiki()` - list all wiki articles
+
+**prompt operations**
+- `list_prompts()` - list all agent prompts
+- `read_prompt(prompt)` - read an agent prompt by filename
 
 #### security
 

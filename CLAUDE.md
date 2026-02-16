@@ -2,30 +2,32 @@
 
 ## Project Overview
 
-This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, and wiki articles without the complexity of full-featured Obsidian tools.
+This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, wiki articles, and agent prompts without the complexity of full-featured Obsidian tools.
 
 The server provides Claude Desktop and Claude Code with access to:
 - Journal entries organized in a year/month filesystem structure (journal/YYYY/MM/)
 - Project directories for organizing work (projects/)
 - Wiki articles for comprehensive topic documentation (wiki/)
+- Agent prompts for LLM instructions (prompts/)
 - General file read/write operations across the vault
 
 ## Current Status
 
-Production ready. 10 tools implemented, 45 tests passing, Docker deployment configured.
+Production ready. 12 tools implemented, 52 tests passing, Docker deployment configured.
 
 This is feature-complete by design. The goal was simplicity, not comprehensiveness.
 
 ## Design Philosophy
 
-### Scope: Journal, Projects, and Wiki
+### Scope: Journal, Projects, Wiki, and Prompts
 
 Most Obsidian MCP servers try to expose everything - tags, templates, complex queries, graph analysis, etc. That creates complexity and maintenance overhead.
 
-This server focuses on three core workflows:
+This server focuses on four core workflows:
 1. **Journal entries**: Daily notes with strict YYYY/MM/DD filesystem hierarchy
 2. **Project tracking**: Simple directory-based organization for ongoing work
 3. **Wiki articles**: Flat directory of comprehensive topic documentation (obsidian wiki)
+4. **Agent prompts**: Read-only access to LLM prompt templates (prompts/)
 
 No templates, no tag systems. Just files organized in predictable directories.
 
@@ -38,6 +40,8 @@ See README.md for vault structure diagram.
 **Projects**: `projects/project name/` - flat hierarchy, no nesting, use spaces instead of hyphens in names (e.g., `home automation/`, `blog redesign/`).
 
 **Wiki**: `wiki/topic name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`), no metadata/frontmatter.
+
+**Prompts**: `prompts/prompt name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `code review assistant.md`, `documentation writer.md`), read-only access for agent instructions.
 
 ### Simplicity Over Features
 
@@ -84,8 +88,8 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 
 ## MCP Interface
 
-**Tools (10 total)**
-2 general file operations + 4 journal + 3 project + 1 wiki = 10 tools total.
+**Tools (12 total)**
+2 general file operations + 4 journal + 3 project + 1 wiki + 2 prompts = 12 tools total.
 
 No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
 
@@ -130,13 +134,14 @@ Docker only. No native installation because Docker handles dependencies and perm
 
 ## Testing
 
-46 tests covering:
+52 tests covering:
 - Input validation (models) - 14 tests
 - Path operations (utils) - 11 tests
 - File operations (e2e) - 6 tests
 - Journal tools (e2e) - 3 tests
 - Project tools (e2e) - 5 tests
 - Wiki tools (e2e) - 5 tests
+- Prompt tools (e2e) - 6 tests
 - Integration workflows (e2e) - 2 tests
 
 Fast execution (< 1 second). No coverage reporting because it's overhead without value for this codebase size.
@@ -163,7 +168,7 @@ No database, no web framework, no query engines.
 - Architecture decisions were intentional, not accidental
 - Simplicity is the goal, not comprehensiveness
 
-Current scope: journal entries + project tracking + wiki articles. No templates, no complex queries, no metadata parsing.
+Current scope: journal entries + project tracking + wiki articles + agent prompts. No templates, no complex queries, no metadata parsing.
 
 ## Development Workflow
 
@@ -171,7 +176,7 @@ Current scope: journal entries + project tracking + wiki articles. No templates,
 2. Code style rules are non-negotiable
 3. Keep dependencies minimal
 4. Docker is the deployment path
-5. Don't break the 10-tool interface
+5. Don't break the 12-tool interface
 
 ## Entry Points
 

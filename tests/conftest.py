@@ -76,3 +76,32 @@ def setup_wiki(vault_path):
     for existing_file in wiki_dir.glob("*"):
         if existing_file.is_file():
             existing_file.unlink()
+
+
+@pytest.fixture
+def setup_prompts(vault_path):
+    ''' create sample agent prompts for testing. '''
+    prompts_dir = vault_path / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+
+    # clean any existing files first
+    for existing_file in prompts_dir.glob("*"):
+        if existing_file.is_file():
+            existing_file.unlink()
+
+    # create test prompts
+    prompts = {
+        "code review assistant.md": "# Code Review Assistant\n\nYou are an assistant that will review code.",
+        "documentation writer.md": "# Documentation Writer\n\nYou are an assistant that writes documentation.",
+        "test generator.md": "# Test Generator\n\nYou are an assistant that generates tests.",
+    }
+
+    for filename, content in prompts.items():
+        (prompts_dir / filename).write_text(content)
+
+    yield prompts_dir
+
+    # cleanup all files
+    for existing_file in prompts_dir.glob("*"):
+        if existing_file.is_file():
+            existing_file.unlink()
