@@ -1,4 +1,4 @@
-this MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for three main workflows: daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, and knowledge management with comprehensive markdown guides.
+this MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for three main workflows: daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, and a wiki for comprehensive markdown articles.
 
 the server assumes your vault is organized like this:
 
@@ -24,7 +24,7 @@ vault/
 │   └── obsidian mcp/
 │       ├── roadmap.md
 │       └── design decisions.md
-└── knowledge/
+└── wiki/
     ├── python asyncio.md
     ├── docker networking.md
     ├── git workflows.md
@@ -100,15 +100,15 @@ claude can help organize and manage project documents:
 - read and write project documentation
 - search across project files
 
-#### knowledge workflow
+#### wiki workflow
 
-claude can help maintain comprehensive topic guides:
-- list all knowledge guides
-- read existing guides for reference
-- create new guides on specific topics
+claude can help maintain comprehensive topic articles in the obsidian wiki:
+- list all wiki articles
+- read existing articles for reference
+- create new articles on specific topics
 - update and expand existing documentation
 
-knowledge guides use descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`) and live in a flat directory structure for easy discovery.
+wiki articles use descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`) and live in a flat directory structure for easy discovery.
 
 #### available tools
 
@@ -127,8 +127,8 @@ knowledge guides use descriptive filenames with spaces in lowercase (e.g., `pyth
 - `list_project_content(project)` - list files within a project
 - `create_project(project)` - create a new project directory
 
-**knowledge operations**
-- `list_knowledge_content()` - list all knowledge guides
+**wiki operations**
+- `list_wiki()` - list all wiki articles
 
 #### security
 

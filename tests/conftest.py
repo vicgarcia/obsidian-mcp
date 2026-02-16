@@ -50,29 +50,29 @@ Some content here with [[links]] and #tags.
 
 
 @pytest.fixture
-def setup_knowledge_guides(vault_path):
-    ''' create sample knowledge guides for testing. '''
-    knowledge_dir = vault_path / "knowledge"
-    knowledge_dir.mkdir(parents=True, exist_ok=True)
+def setup_wiki(vault_path):
+    ''' create sample wiki articles for testing. '''
+    wiki_dir = vault_path / "wiki"
+    wiki_dir.mkdir(parents=True, exist_ok=True)
 
     # clean any existing files first
-    for existing_file in knowledge_dir.glob("*"):
+    for existing_file in wiki_dir.glob("*"):
         if existing_file.is_file():
             existing_file.unlink()
 
-    # create test guides
-    guides = {
+    # create test articles
+    articles = {
         "python-asyncio.md": "# Python Asyncio\n\nComplete guide to async programming.",
         "docker-networking.md": "# Docker Networking\n\nNetworking concepts in Docker.",
         "git-workflows.md": "# Git Workflows\n\nBranching strategies and workflows.",
     }
 
-    for filename, content in guides.items():
-        (knowledge_dir / filename).write_text(content)
+    for filename, content in articles.items():
+        (wiki_dir / filename).write_text(content)
 
-    yield knowledge_dir
+    yield wiki_dir
 
     # cleanup all files
-    for existing_file in knowledge_dir.glob("*"):
+    for existing_file in wiki_dir.glob("*"):
         if existing_file.is_file():
             existing_file.unlink()

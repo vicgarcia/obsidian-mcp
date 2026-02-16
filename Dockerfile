@@ -12,6 +12,8 @@ COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
+USER nobody
+
 ENV TZ=America/New_York
 
 ENV OBSIDIAN_VAULT_PATH=/vault

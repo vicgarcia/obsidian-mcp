@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, and knowledge management without the complexity of full-featured Obsidian tools.
+This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, and wiki articles without the complexity of full-featured Obsidian tools.
 
 The server provides Claude Desktop and Claude Code with access to:
 - Journal entries organized in a year/month filesystem structure (journal/YYYY/MM/)
 - Project directories for organizing work (projects/)
-- Knowledge guides for comprehensive topic documentation (knowledge/)
+- Wiki articles for comprehensive topic documentation (wiki/)
 - General file read/write operations across the vault
 
 ## Current Status
@@ -18,16 +18,16 @@ This is feature-complete by design. The goal was simplicity, not comprehensivene
 
 ## Design Philosophy
 
-### Scope: Journal, Projects, and Knowledge
+### Scope: Journal, Projects, and Wiki
 
 Most Obsidian MCP servers try to expose everything - tags, templates, complex queries, graph analysis, etc. That creates complexity and maintenance overhead.
 
 This server focuses on three core workflows:
 1. **Journal entries**: Daily notes with strict YYYY/MM/DD filesystem hierarchy
 2. **Project tracking**: Simple directory-based organization for ongoing work
-3. **Knowledge guides**: Flat directory of comprehensive topic documentation
+3. **Wiki articles**: Flat directory of comprehensive topic documentation (obsidian wiki)
 
-No templates, no knowledge graphs, no tag systems. Just files organized in predictable directories.
+No templates, no tag systems. Just files organized in predictable directories.
 
 ### Filesystem Organization
 
@@ -37,7 +37,7 @@ See README.md for vault structure diagram.
 
 **Projects**: `projects/project name/` - flat hierarchy, no nesting, use spaces instead of hyphens in names (e.g., `home automation/`, `blog redesign/`).
 
-**Knowledge**: `knowledge/topic name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`), no metadata/frontmatter.
+**Wiki**: `wiki/topic name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`), no metadata/frontmatter.
 
 ### Simplicity Over Features
 
@@ -46,7 +46,7 @@ Every omitted feature is a decision to keep the codebase maintainable:
 - No tag support (filesystem organization is enough)
 - No complex queries (just list and read)
 - No file deletion/moving (use read/write instead)
-- No subdirectories in knowledge (flat structure only)
+- No subdirectories in wiki (flat structure only)
 - No metadata parsing (filenames describe content)
 
 Each omitted feature means less code to maintain, fewer edge cases, and faster execution.
@@ -85,7 +85,7 @@ All MCP tools are in server.py. No need to split into separate modules for such 
 ## MCP Interface
 
 **Tools (10 total)**
-2 general file operations + 4 journal + 3 project + 1 knowledge = 10 tools total.
+2 general file operations + 4 journal + 3 project + 1 wiki = 10 tools total.
 
 No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
 
@@ -136,7 +136,7 @@ Docker only. No native installation because Docker handles dependencies and perm
 - File operations (e2e) - 6 tests
 - Journal tools (e2e) - 3 tests
 - Project tools (e2e) - 5 tests
-- Knowledge tools (e2e) - 5 tests
+- Wiki tools (e2e) - 5 tests
 - Integration workflows (e2e) - 2 tests
 
 Fast execution (< 1 second). No coverage reporting because it's overhead without value for this codebase size.
@@ -163,7 +163,7 @@ No database, no web framework, no query engines.
 - Architecture decisions were intentional, not accidental
 - Simplicity is the goal, not comprehensiveness
 
-Current scope: journal entries + project tracking + knowledge guides. No templates, no complex queries, no metadata parsing.
+Current scope: journal entries + project tracking + wiki articles. No templates, no complex queries, no metadata parsing.
 
 ## Development Workflow
 

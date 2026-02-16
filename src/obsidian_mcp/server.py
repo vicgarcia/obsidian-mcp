@@ -438,11 +438,11 @@ def create_project(project: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def list_knowledge_content() -> List[Dict[str, str]]:
+def list_wiki() -> List[Dict[str, str]]:
     '''
-    List all markdown files in the knowledge directory.
+    List all wiki articles in the obsidian wiki.
 
-    Knowledge guides are comprehensive, standalone documentation on specific topics. Use
+    Wiki articles are comprehensive, standalone documentation on specific topics. Use
     descriptive filenames with spaces in lowercase (e.g., "python asyncio.md", "docker
     networking.md") in a flat directory structure for easy discovery.
 
@@ -450,25 +450,25 @@ def list_knowledge_content() -> List[Dict[str, str]]:
         List of markdown files with metadata
     '''
     try:
-        logger.debug("list_knowledge_content called")
+        logger.debug("list_wiki called")
         vault_base = get_vault_base()
-        knowledge_dir = vault_base / "knowledge"
+        wiki_dir = vault_base / "wiki"
 
-        # get all files in the knowledge directory (non-recursive)
-        files = list_files_in_directory(knowledge_dir, vault_base, recursive=False)
+        # get all files in the wiki directory (non-recursive)
+        files = list_files_in_directory(wiki_dir, vault_base, recursive=False)
 
         # filter to markdown files only
-        guides = [f for f in files if Path(f["path"]).suffix == ".md"]
+        articles = [f for f in files if Path(f["path"]).suffix == ".md"]
 
-        logger.info(f"found {len(guides)} knowledge files")
-        return guides
+        logger.info(f"found {len(articles)} wiki articles")
+        return articles
 
     except ValueError as e:
-        logger.error(f"value error listing knowledge content: {e}")
+        logger.error(f"value error listing wiki: {e}")
         return [create_error_response(str(e))]
     except Exception as e:
-        logger.exception(f"unexpected error listing knowledge content: {e}")
-        return [create_error_response(f"Unexpected error listing knowledge content: {e}")]
+        logger.exception(f"unexpected error listing wiki: {e}")
+        return [create_error_response(f"Unexpected error listing wiki: {e}")]
 
 
 def run():

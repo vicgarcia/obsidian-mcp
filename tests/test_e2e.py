@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from datetime import datetime
 
-from obsidian_mcp.server import read_file, write_file, get_current_date, list_projects, list_project_content, create_project, list_knowledge_content
+from obsidian_mcp.server import read_file, write_file, get_current_date, list_projects, list_project_content, create_project, list_wiki
 
 
 class TestFileOperations:
@@ -179,96 +179,96 @@ class TestProjectTools:
         assert project_dir.is_dir()
 
 
-class TestKnowledgeTools:
-    ''' test knowledge management tools. '''
+class TestWikiTools:
+    ''' test wiki management tools. '''
 
-    def test_list_knowledge_content_empty(self, vault_path):
-        ''' test listing knowledge guides when directory is empty. '''
-        # ensure knowledge directory exists but is empty
-        knowledge_dir = vault_path / "knowledge"
-        knowledge_dir.mkdir(parents=True, exist_ok=True)
+    def test_list_wiki_empty(self, vault_path):
+        ''' test listing wiki articles when directory is empty. '''
+        # ensure wiki directory exists but is empty
+        wiki_dir = vault_path / "wiki"
+        wiki_dir.mkdir(parents=True, exist_ok=True)
 
         # clean any existing files
-        for existing_file in knowledge_dir.glob("*"):
+        for existing_file in wiki_dir.glob("*"):
             if existing_file.is_file():
                 existing_file.unlink()
 
-        result = list_knowledge_content()
+        result = list_wiki()
 
         assert isinstance(result, list)
         assert len(result) == 0
 
-    def test_list_knowledge_content_with_content(self, setup_knowledge_guides):
-        ''' test listing knowledge guides when guides exist. '''
-        result = list_knowledge_content()
+    def test_list_wiki_with_content(self, setup_wiki):
+        ''' test listing wiki articles when articles exist. '''
+        result = list_wiki()
 
         assert isinstance(result, list)
         assert len(result) == 3
 
-        guide_names = [g["name"] for g in result]
-        assert "python-asyncio.md" in guide_names
-        assert "docker-networking.md" in guide_names
-        assert "git-workflows.md" in guide_names
+        article_names = [a["name"] for a in result]
+        assert "python-asyncio.md" in article_names
+        assert "docker-networking.md" in article_names
+        assert "git-workflows.md" in article_names
 
         # verify paths are correct
-        guide_paths = [g["path"] for g in result]
-        assert "knowledge/python-asyncio.md" in guide_paths
+        article_paths = [a["path"] for a in result]
+        assert "wiki/python-asyncio.md" in article_paths
 
-    def test_list_knowledge_content_filters_markdown(self, vault_path):
+    def test_list_wiki_filters_markdown(self, vault_path):
         ''' test that non-markdown files are filtered out. '''
-        knowledge_dir = vault_path / "knowledge"
-        knowledge_dir.mkdir(parents=True, exist_ok=True)
+        wiki_dir = vault_path / "wiki"
+        wiki_dir.mkdir(parents=True, exist_ok=True)
 
         # clean any existing files
-        for existing_file in knowledge_dir.glob("*"):
+        for existing_file in wiki_dir.glob("*"):
             if existing_file.is_file():
                 existing_file.unlink()
 
         # create markdown and non-markdown files
-        (knowledge_dir / "guide.md").write_text("# Guide")
-        (knowledge_dir / "image.png").write_bytes(b"fake image data")
-        (knowledge_dir / "data.json").write_text('{"key": "value"}')
+        (wiki_dir / "guide.md").write_text("# Guide")
+        (wiki_dir / "image.png").write_bytes(b"fake image data")
+        (wiki_dir / "data.json").write_text('{"key": "value"}')
 
-        result = list_knowledge_content()
+        result = list_wiki()
 
         assert len(result) == 1
         assert result[0]["name"] == "guide.md"
 
         # cleanup
-        (knowledge_dir / "guide.md").unlink()
-        (knowledge_dir / "image.png").unlink()
-        (knowledge_dir / "data.json").unlink()
+        (wiki_dir / "guide.md").unlink()
+        (wiki_dir / "image.png").unlink()
+        (wiki_dir / "data.json").unlink()
 
-    def test_read_knowledge_guide(self, setup_knowledge_guides):
-        ''' test reading a knowledge guide using read_file. '''
-        result = read_file("knowledge/python-asyncio.md")
+    def test_read_wiki_article(self, setup_wiki):
+        ''' test reading a wiki article using read_file. '''
+        result = read_file("wiki/python-asyncio.md")
 
         assert "content" in result
         assert "Python Asyncio" in result["content"]
         assert "async programming" in result["content"]
 
-    def test_write_knowledge_guide(self, vault_path):
-        ''' test writing a new knowledge guide using write_file. '''
-        knowledge_dir = vault_path / "knowledge"
-        knowledge_dir.mkdir(parents=True, exist_ok=True)
+    def test_write_wiki_article(self, vault_path):
+        ''' test writing a new wiki article using write_file. '''
+        wiki_dir = vault_path / "wiki"
+        wiki_dir.mkdir(parents=True, exist_ok=True)
 
         content = "# Kubernetes Basics\n\nIntroduction to Kubernetes concepts."
-        result = write_file("knowledge/kubernetes-basics.md", content)
+        result = write_file("wiki/kubernetes-basics.md", content)
 
         assert result == {"success": True}
 
         # verify file was created
-        guide_file = knowledge_dir / "kubernetes-basics.md"
-        assert guide_file.exists()
-        assert guide_file.read_text() == content
+        article_file = wiki_dir / "kubernetes-basics.md"
+        assert article_file.exists()
+        assert article_file.read_text() == content
 
         # verify it appears in listing
-        guides = list_knowledge_content()
-        guide_names = [g["name"] for g in guides]
-        assert "kubernetes-basics.md" in guide_names
+        articles = list_wiki()
+        article_names = [a["name"] for a in articles]
+        assert "kubernetes-basics.md" in article_names
 
         # cleanup
-        guide_file.unlink()
+        article_file.unlink()
 
 
 class TestIntegration:
