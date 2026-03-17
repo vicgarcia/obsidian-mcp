@@ -1,7 +1,7 @@
 # Claude Code Session Documentation
 
 ## Project Overview
-Obsidian MCP Server - A minimal Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 12 core tools for journal entries, projects, wiki articles, and agent prompts. Intentionally minimal to keep context usage low and let Claude handle interpretation.
+Obsidian MCP Server - A minimal Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 10 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
 
 Single-file module installable via `uv tool install`.
 
@@ -44,7 +44,7 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 - `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
 ## Tools Overview
-Twelve core MCP tools (see README.md for full documentation):
+Ten core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
 - `get_current_date` - Current date in multiple formats
 - `list_todays_journal_entry` - Get today's journal path
@@ -52,7 +52,6 @@ Twelve core MCP tools (see README.md for full documentation):
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
-- `list_prompts` / `read_prompt` - Access agent prompts
 
 ## Implementation Notes
 
@@ -73,7 +72,7 @@ Twelve core MCP tools (see README.md for full documentation):
 - **Arg parsing** — `parse_args()`, `_HELP` constant
 - **Pydantic models** — Input validation classes
 - **Utility functions** — `get_vault_base()`, `validate_vault_path()`, helpers
-- **MCP server** — `mcp = FastMCP(...)`, 12 `@mcp.tool()` definitions
+- **MCP server** — `mcp = FastMCP(...)`, 10 `@mcp.tool()` definitions
 - **Entry point** — `run()`, `if __name__ == '__main__': run()`
 
 ### Entry Point Flow
@@ -89,8 +88,8 @@ run()
 ## Design Decisions
 
 ### What We Built
-- **Minimal tool set**: 12 operations covering four workflows
-- **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`, `prompts/`
+- **Minimal tool set**: 10 operations covering three workflows
+- **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`
 - **Dual deployment**: uv tool install + Docker
 - **Path validation**: Security-first file operations
 

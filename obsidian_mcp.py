@@ -117,25 +117,6 @@ class ProjectInput(BaseModel):
         return v
 
 
-class PromptInput(BaseModel):
-    ''' Input validation for prompt operations. '''
-    prompt: str
-
-    @field_validator("prompt")
-    @classmethod
-    def validate_prompt(cls, v: str) -> str:
-        if not v or v.strip() == "":
-            raise ValueError("Prompt name cannot be empty")
-        v = v.strip()
-        invalid_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|"]
-        for char in invalid_chars:
-            if char in v:
-                raise ValueError(f"Prompt name cannot contain '{char}'")
-        if ".." in v:
-            raise ValueError("Prompt name cannot contain '..'")
-        return v
-
-
 # utility functions
 
 def set_vault_path(path: str) -> None:
@@ -670,81 +651,6 @@ def list_wiki() -> List[Dict[str, str]]:
     except Exception as e:
         logger.exception(f"unexpected error listing wiki: {e}")
         return [create_error_response(f"Unexpected error listing wiki: {e}")]
-
-
-@mcp.tool()
-def list_prompts() -> List[Dict[str, str]]:
-    '''
-    List all agent prompts in the prompts directory.
-
-    Agent prompts are markdown files intended to be used as system prompts or instructions
-    for LLM agents. Use descriptive filenames with spaces in lowercase (e.g., "code review
-    assistant.md", "documentation writer.md") in a flat directory structure.
-
-    Returns:
-        List of prompt files with metadata
-    '''
-    try:
-        logger.debug("list_prompts called")
-        vault_base = get_vault_base()
-        prompts_dir = vault_base / "prompts"
-
-        files = list_files_in_directory(prompts_dir, vault_base, recursive=False)
-        prompts = [f for f in files if Path(f["path"]).suffix == ".md"]
-
-        logger.info(f"found {len(prompts)} agent prompts")
-        return prompts
-
-    except ValueError as e:
-        logger.error(f"value error listing prompts: {e}")
-        return [create_error_response(str(e))]
-    except Exception as e:
-        logger.exception(f"unexpected error listing prompts: {e}")
-        return [create_error_response(f"Unexpected error listing prompts: {e}")]
-
-
-@mcp.tool()
-def read_prompt(prompt: str) -> Dict[str, Any]:
-    '''
-    Read an agent prompt from the prompts directory.
-
-    Agent prompts are markdown files intended to be used as system prompts or instructions
-    for LLM agents. Pass the filename (e.g., "code review assistant.md") to read its content.
-
-    Args:
-        prompt: Filename of the prompt to read (e.g., "code review assistant.md")
-
-    Returns:
-        Dictionary with prompt content or error message
-    '''
-    try:
-        logger.debug(f"read_prompt called with: {prompt}")
-        validated_input = PromptInput(prompt=prompt)
-
-        vault_base = get_vault_base()
-        prompt_path = vault_base / "prompts" / validated_input.prompt
-
-        if not prompt_path.exists():
-            logger.warning(f"prompt not found: {validated_input.prompt}")
-            return create_error_response(f"Prompt not found: {validated_input.prompt}")
-
-        if not prompt_path.is_file():
-            logger.warning(f"prompt is not a file: {validated_input.prompt}")
-            return create_error_response(f"Prompt is not a file: {validated_input.prompt}")
-
-        content = prompt_path.read_text(encoding='utf-8')
-        logger.info(f"successfully read prompt: {validated_input.prompt} ({len(content)} chars)")
-        return {"content": content}
-
-    except ValidationError as e:
-        logger.error(f"validation error reading prompt: {e}")
-        return create_error_response(f"Invalid input: {e}")
-    except ValueError as e:
-        logger.error(f"value error reading prompt: {e}")
-        return create_error_response(str(e))
-    except Exception as e:
-        logger.exception(f"unexpected error reading prompt: {e}")
-        return create_error_response(f"Unexpected error reading prompt: {e}")
 
 
 # entry point

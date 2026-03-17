@@ -13,14 +13,11 @@ from obsidian_mcp import (
     list_project_content,
     create_project,
     list_wiki,
-    list_prompts,
-    read_prompt,
     # models
     YearMonthInput,
     FilePathInput,
     FileWriteInput,
     ProjectInput,
-    PromptInput,
     # utilities
     get_vault_base,
     validate_vault_path,
@@ -72,32 +69,6 @@ def setup_wiki(vault_path):
     yield wiki_dir
 
     for existing_file in wiki_dir.glob("*"):
-        if existing_file.is_file():
-            existing_file.unlink()
-
-
-@pytest.fixture
-def setup_prompts(vault_path):
-    ''' create sample agent prompts for testing. '''
-    prompts_dir = vault_path / "prompts"
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-
-    for existing_file in prompts_dir.glob("*"):
-        if existing_file.is_file():
-            existing_file.unlink()
-
-    prompts = {
-        "code review assistant.md": "# Code Review Assistant\n\nYou are an assistant that will review code.",
-        "documentation writer.md": "# Documentation Writer\n\nYou are an assistant that writes documentation.",
-        "test generator.md": "# Test Generator\n\nYou are an assistant that generates tests.",
-    }
-
-    for filename, content in prompts.items():
-        (prompts_dir / filename).write_text(content)
-
-    yield prompts_dir
-
-    for existing_file in prompts_dir.glob("*"):
         if existing_file.is_file():
             existing_file.unlink()
 
@@ -350,88 +321,6 @@ class TestWikiTools:
         assert "kubernetes-basics.md" in article_names
 
         article_file.unlink()
-
-
-# prompt tests
-
-class TestPromptTools:
-    ''' test prompt management tools. '''
-
-    def test_list_prompts_empty(self, vault_path):
-        ''' test listing prompts when directory is empty. '''
-        prompts_dir = vault_path / "prompts"
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-
-        for existing_file in prompts_dir.glob("*"):
-            if existing_file.is_file():
-                existing_file.unlink()
-
-        result = list_prompts()
-
-        assert isinstance(result, list)
-        assert len(result) == 0
-
-    def test_list_prompts_with_content(self, setup_prompts):
-        ''' test listing prompts when prompts exist. '''
-        result = list_prompts()
-
-        assert isinstance(result, list)
-        assert len(result) == 3
-
-        prompt_names = [p["name"] for p in result]
-        assert "code review assistant.md" in prompt_names
-        assert "documentation writer.md" in prompt_names
-        assert "test generator.md" in prompt_names
-
-        prompt_paths = [p["path"] for p in result]
-        assert "prompts/code review assistant.md" in prompt_paths
-
-    def test_list_prompts_filters_markdown(self, vault_path):
-        ''' test that non-markdown files are filtered out. '''
-        prompts_dir = vault_path / "prompts"
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-
-        for existing_file in prompts_dir.glob("*"):
-            if existing_file.is_file():
-                existing_file.unlink()
-
-        (prompts_dir / "agent.md").write_text("# Agent Prompt")
-        (prompts_dir / "config.json").write_text('{"key": "value"}')
-        (prompts_dir / "notes.txt").write_text("some notes")
-
-        result = list_prompts()
-
-        assert len(result) == 1
-        assert result[0]["name"] == "agent.md"
-
-        (prompts_dir / "agent.md").unlink()
-        (prompts_dir / "config.json").unlink()
-        (prompts_dir / "notes.txt").unlink()
-
-    def test_read_prompt(self, setup_prompts):
-        ''' test reading a prompt using read_prompt. '''
-        result = read_prompt("code review assistant.md")
-
-        assert "content" in result
-        assert "Code Review Assistant" in result["content"]
-        assert "review code" in result["content"]
-
-    def test_read_prompt_not_found(self, vault_path):
-        ''' test reading a non-existent prompt. '''
-        prompts_dir = vault_path / "prompts"
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-
-        result = read_prompt("nonexistent prompt.md")
-
-        assert "error" in result
-        assert "Prompt not found" in result["error"]
-
-    def test_read_prompt_path_traversal(self):
-        ''' test that path traversal is prevented in read_prompt. '''
-        result = read_prompt("../../../etc/passwd")
-
-        assert "error" in result
-        assert "Invalid input" in result["error"]
 
 
 # model validation tests

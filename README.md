@@ -1,4 +1,4 @@
-This MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for four main workflows: daily journal entries, project-based document organization, a wiki for comprehensive markdown articles, and agent prompts for LLM instructions.
+This MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for three main workflows: daily journal entries, project-based document organization, and a wiki for comprehensive markdown articles.
 
 Once set up, you can make queries like:
 
@@ -6,7 +6,6 @@ Once set up, you can make queries like:
 - "what did I work on last week?"
 - "list my projects"
 - "read the docker networking wiki article"
-- "use the code review assistant prompt"
 
 ## setup
 
@@ -18,8 +17,7 @@ the server assumes your vault is organized like this:
 vault/
 ├── journal/YYYY/MM/YYYY-MM-DD.md   # daily journal entries
 ├── projects/project name/           # project directories with docs
-├── wiki/topic name.md              # standalone wiki articles
-└── prompts/prompt name.md          # agent prompt files
+└── wiki/topic name.md              # standalone wiki articles
 ```
 
 #### option 1: install with uv
@@ -126,17 +124,6 @@ list all wiki articles in the wiki directory
 
 **example usage in claude:**
 > "list my wiki articles"
-
-#### list_prompts / read_prompt
-
-access agent prompts stored in your vault
-
-**parameters:**
-- `prompt` (required for read): filename of the prompt
-
-**example usage in claude:**
-> "list my prompts"
-> "read the code review assistant prompt"
 
 ## development
 
