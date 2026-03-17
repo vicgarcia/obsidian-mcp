@@ -1,53 +1,47 @@
-this MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for four main workflows: daily journal entries using the [daily notes](https://help.obsidian.md/plugins/daily-notes) feature, project-based document organization, a wiki for comprehensive markdown articles, and agent prompts for LLM instructions.
+This MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md) vault for four main workflows: daily journal entries, project-based document organization, a wiki for comprehensive markdown articles, and agent prompts for LLM instructions.
+
+Once set up, you can make queries like:
+
+- "start a daily notes session"
+- "what did I work on last week?"
+- "list my projects"
+- "read the docker networking wiki article"
+- "use the code review assistant prompt"
+
+## setup
+
+#### configure your vault
 
 the server assumes your vault is organized like this:
 
 ```
 vault/
-├── journal/
-│   └── 2025/
-│       ├── 01/
-│       │   ├── 2025-01-01.md
-│       │   ├── 2025-01-02.md
-│       │   └── 2025-01-15.md
-│       ├── 02/
-│       └── 10/
-│           └── 2025-10-06.md
-├── projects/
-│   ├── home automation/
-│   │   ├── requirements.md
-│   │   ├── architecture.md
-│   │   └── device list.md
-│   ├── blog redesign/
-│   │   ├── design.md
-│   │   └── content structure.md
-│   └── obsidian mcp/
-│       ├── roadmap.md
-│       └── design decisions.md
-├── wiki/
-│   ├── python asyncio.md
-│   ├── docker networking.md
-│   ├── git workflows.md
-│   └── kubernetes basics.md
-└── prompts/
-    ├── code review assistant.md
-    ├── documentation writer.md
-    └── test generator.md
+├── journal/YYYY/MM/YYYY-MM-DD.md   # daily journal entries
+├── projects/project name/           # project directories with docs
+├── wiki/topic name.md              # standalone wiki articles
+└── prompts/prompt name.md          # agent prompt files
 ```
 
-## setup
-
-this mcp server runs in a docker container for use with claude desktop.
-
-#### get the docker image
+#### option 1: install with uv
 
 ```bash
-docker pull ghcr.io/vicgarcia/obsidian-mcp:latest
+uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 ```
 
-#### configure claude desktop or claude code
+claude desktop config:
 
-**claude desktop**: add this to your mcp settings:
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "obsidian-mcp",
+      "args": ["--vault", "/path/to/your/vault"]
+    }
+  }
+}
+```
+
+#### option 2: docker
 
 ```json
 {
@@ -55,8 +49,7 @@ docker pull ghcr.io/vicgarcia/obsidian-mcp:latest
     "obsidian": {
       "command": "docker",
       "args": [
-        "run", "--rm", "-i",
-        "--user", "1000:1000",
+        "run", "-i", "--rm",
         "-v", "/path/to/your/vault:/vault",
         "-e", "TZ=America/New_York",
         "ghcr.io/vicgarcia/obsidian-mcp:latest"
@@ -66,100 +59,96 @@ docker pull ghcr.io/vicgarcia/obsidian-mcp:latest
 }
 ```
 
-**claude code**: use the cli to add the server:
+replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
-```bash
-claude mcp add --scope user --transport stdio obsidian -- \
-  docker run --rm -i \
-  -u $(id -u):$(id -g) \
-  -v /path/to/your/vault:/vault \
-  -e TZ=America/New_York \
-  ghcr.io/vicgarcia/obsidian-mcp:latest
-```
+## features
 
-replace the following:
-- `1000:1000` with your user:group IDs (run `id` command to find yours)
-- `/path/to/your/vault` with the absolute path to your obsidian vault
-- `America/New_York` with your timezone (e.g., `America/Chicago`, `Europe/London`)
+this mcp server exposes tools to interact with your obsidian vault.
 
-optional: add `-e "LOG_LEVEL=debug"` to the args for detailed logging
+#### read_file / write_file
 
-## usage
+read or write any file in the vault
 
-#### journal workflow
+**parameters:**
+- `file_path` (required): vault-relative path to the file
+- `content` (required for write): content to write
 
-the typical workflow is asking claude to help write or update today's journal entry. claude can:
-- get today's journal path
-- read existing content
-- help draft or expand entries
-- list entries from specific months
-- read past entries for context
+**example usage in claude:**
+> "read the architecture.md file in my home automation project"
 
-#### project workflow
+#### get_current_date
 
-claude can help organize and manage project documents:
-- list all projects
-- browse files within a project
-- create new project directories
-- read and write project documentation
-- search across project files
+get the current date in both YYYY-MM-DD and human-readable formats
 
-#### wiki workflow
+**example usage in claude:**
+> "what's today's date?"
 
-claude can help maintain comprehensive topic articles in the obsidian wiki:
-- list all wiki articles
-- read existing articles for reference
-- create new articles on specific topics
-- update and expand existing documentation
+#### list_todays_journal_entry
 
-wiki articles use descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`) and live in a flat directory structure for easy discovery.
+get the path for today's journal entry (e.g., `journal/2025/01/2025-01-15.md`)
 
-#### prompts workflow
+**example usage in claude:**
+> "what's my journal path for today?"
 
-claude can access agent prompts stored in your vault:
-- list all available prompts
-- read prompt content for use as agent instructions
+#### start_daily_notes_session
 
-agent prompts are markdown files intended to be used as system prompts or instructions for LLM agents. use descriptive filenames with spaces in lowercase (e.g., `code review assistant.md`, `documentation writer.md`).
+start an interactive daily notes workflow that announces the date, collects notes throughout the day with follow-up questions, and generates a narrative journal entry
 
-#### available tools
+**example usage in claude:**
+> "start a daily notes session"
 
-**basic operations**
-- `read_file(file_path)` - read any file in the vault
-- `write_file(file_path, content)` - write to any file in the vault
-- `get_current_date()` - get the current date in YYYY-MM-DD format
+#### list_journal_entries_by_year_and_month
 
-**journal operations**
-- `list_todays_journal_entry()` - get the path for today's entry
-- `list_journal_entries_by_year_and_month(year, month)` - list entries for a specific month
-- `start_daily_notes_session()` - start an interactive session for daily note-taking
+list all journal entries for a specific month
 
-**project operations**
-- `list_projects()` - list all project directories
-- `list_project_content(project)` - list files within a project
-- `create_project(project)` - create a new project directory
+**parameters:**
+- `year` (required): year in YYYY format
+- `month` (required): month in MM format (e.g., "01", "10")
 
-**wiki operations**
-- `list_wiki()` - list all wiki articles
+**example usage in claude:**
+> "show me my journal entries from january 2025"
 
-**prompt operations**
-- `list_prompts()` - list all agent prompts
-- `read_prompt(prompt)` - read an agent prompt by filename
+#### list_projects / list_project_content / create_project
 
-#### security
+manage project directories in your vault
 
-path validation prevents access outside your vault. all file operations are checked against the vault root directory. docker runs with your user permissions, so file ownership stays correct.
+**parameters:**
+- `project` (required): name of the project directory
 
-## dev
+**example usage in claude:**
+> "list my projects"
+> "show me the files in my home automation project"
+> "create a new project called blog redesign"
 
-if you want to work on this locally:
+#### list_wiki
+
+list all wiki articles in the wiki directory
+
+**example usage in claude:**
+> "list my wiki articles"
+
+#### list_prompts / read_prompt
+
+access agent prompts stored in your vault
+
+**parameters:**
+- `prompt` (required for read): filename of the prompt
+
+**example usage in claude:**
+> "list my prompts"
+> "read the code review assistant prompt"
+
+## development
 
 ```bash
 git clone https://github.com/vicgarcia/obsidian-mcp
 cd obsidian-mcp
 
-# install dependencies
-uv sync
+# install in editable mode
+uv tool install --editable .
+
+# run
+obsidian-mcp --vault /path/to/vault
 
 # run tests
 uv run pytest
@@ -168,41 +157,18 @@ uv run pytest
 #### project structure
 
 ```
-src/
-  obsidian_mcp/
-    __init__.py       # package marker
-    server.py         # mcp tools implementation + run() entry point
-    models.py         # input validation
-    utils.py          # helper functions
-
-tests/
-  conftest.py         # pytest fixtures
-  test_e2e.py         # end-to-end tests
-  test_models.py      # validation tests
-  test_utils.py       # utility tests
+obsidian-mcp/
+├── obsidian_mcp.py       # single-file module (server + all logic)
+├── obsidian_mcp_test.py  # tests
+├── pyproject.toml        # package metadata and dependencies
+├── Dockerfile            # docker deployment
+└── README.md
 ```
 
 #### building docker image locally
 
 ```bash
-docker build -t ghcr.io/vicgarcia/obsidian-mcp:local .
+docker build -t obsidian-mcp:local .
 ```
 
-to use the local build in claude desktop, update your mcp settings
-
-```json
-{
-  "mcpServers": {
-    "obsidian": {
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "--user", "1000:1000",
-        "-v", "/path/to/your/vault:/vault",
-        "-e", "TZ=America/New_York",
-        "ghcr.io/vicgarcia/obsidian-mcp:local"
-      ]
-    }
-  }
-}
-```
+to use the local build in claude desktop, update your mcp settings to use `obsidian-mcp:local` instead of `ghcr.io/vicgarcia/obsidian-mcp:latest`.

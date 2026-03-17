@@ -1,34 +1,260 @@
-from typing import Dict, Any, List
-import os
-import sys
-from pathlib import Path
-from datetime import datetime
-from mcp.server.fastmcp import FastMCP
-from pydantic import ValidationError
-
-from .models import (
-    FilePathInput,
-    FileWriteInput,
-    YearMonthInput,
-    ProjectInput,
-    PromptInput,
-)
-from .utils import (
-    get_vault_base,
-    validate_vault_path,
-    create_error_response,
-    create_success_response,
-    get_today_journal_path,
-    list_files_in_directory,
-    list_directories_in_directory,
-    is_valid_journal_filename,
-)
-
+import argparse
 import logging
+import os
+import re
+import zoneinfo
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel, ValidationError, field_validator
+
 logger = logging.getLogger(__name__)
 
+_HELP = '''
+environment variables:
+  OBSIDIAN_VAULT_PATH   Path to the Obsidian vault directory
+  TZ                    Timezone for journal dates (e.g., America/New_York)
+  LOG_LEVEL             Logging level (debug or info, default: info)
+'''
 
-mcp = FastMCP("Obsidian MCP Server")
+# module-level vault path set during run()
+_vault_path: Optional[str] = None
+
+
+# arg parsing
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog='obsidian-mcp',
+        description='Obsidian MCP server',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_HELP
+    )
+    parser.add_argument(
+        '--vault',
+        default=os.getenv('OBSIDIAN_VAULT_PATH', '/vault'),
+        metavar='PATH',
+        help='path to Obsidian vault (or OBSIDIAN_VAULT_PATH env var)'
+    )
+    return parser.parse_args()
+
+
+# pydantic validation models
+
+class YearMonthInput(BaseModel):
+    ''' Input validation for year/month operations. '''
+    year: str
+    month: str
+
+    @field_validator("year")
+    @classmethod
+    def validate_year(cls, v: str) -> str:
+        if not re.match(r'^\d{4}$', v):
+            raise ValueError("Year must be in YYYY format")
+        year_int = int(v)
+        if year_int < 1970 or year_int > 2100:
+            raise ValueError("Year must be between 1970 and 2100")
+        return v
+
+    @field_validator("month")
+    @classmethod
+    def validate_month(cls, v: str) -> str:
+        if not re.match(r'^\d{2}$', v):
+            raise ValueError("Month must be in MM format (01-12)")
+        month_int = int(v)
+        if month_int < 1 or month_int > 12:
+            raise ValueError("Month must be between 01 and 12")
+        return v
+
+
+class FilePathInput(BaseModel):
+    ''' Input validation for file path operations. '''
+    file_path: str
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, v: str) -> str:
+        if not v or v.strip() == "":
+            raise ValueError("File path cannot be empty")
+        if ".." in v or v.startswith("/"):
+            raise ValueError("Invalid file path: directory traversal not allowed")
+        return v.strip()
+
+
+class FileWriteInput(BaseModel):
+    ''' Input validation for file write operations. '''
+    file_path: str
+    content: str
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, v: str) -> str:
+        if not v or v.strip() == "":
+            raise ValueError("File path cannot be empty")
+        if ".." in v or v.startswith("/"):
+            raise ValueError("Invalid file path: directory traversal not allowed")
+        return v.strip()
+
+
+class ProjectInput(BaseModel):
+    ''' Input validation for project operations. '''
+    project: str
+
+    @field_validator("project")
+    @classmethod
+    def validate_project(cls, v: str) -> str:
+        if not v or v.strip() == "":
+            raise ValueError("Project name cannot be empty")
+        v = v.strip()
+        invalid_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|"]
+        for char in invalid_chars:
+            if char in v:
+                raise ValueError(f"Project name cannot contain '{char}'")
+        if ".." in v:
+            raise ValueError("Project name cannot contain '..'")
+        return v
+
+
+class PromptInput(BaseModel):
+    ''' Input validation for prompt operations. '''
+    prompt: str
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, v: str) -> str:
+        if not v or v.strip() == "":
+            raise ValueError("Prompt name cannot be empty")
+        v = v.strip()
+        invalid_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|"]
+        for char in invalid_chars:
+            if char in v:
+                raise ValueError(f"Prompt name cannot contain '{char}'")
+        if ".." in v:
+            raise ValueError("Prompt name cannot contain '..'")
+        return v
+
+
+# utility functions
+
+def set_vault_path(path: str) -> None:
+    ''' Set the module-level vault path. Called from run(). '''
+    global _vault_path
+    _vault_path = path
+    logger.debug(f"vault path set to: {path}")
+
+
+def get_vault_base() -> Path:
+    ''' Get the vault base path from module-level variable or environment. '''
+    vault_path = _vault_path or os.getenv('OBSIDIAN_VAULT_PATH')
+    if not vault_path:
+        logger.error("vault path is not configured")
+        raise ValueError("vault path is required (--vault or OBSIDIAN_VAULT_PATH env var)")
+    resolved_path = Path(vault_path).resolve()
+    logger.debug(f"vault base path: {resolved_path}")
+    return resolved_path
+
+
+def validate_vault_path(file_path: str) -> Path:
+    ''' Validate and resolve a vault-relative path. '''
+    vault_base = get_vault_base()
+    vault_path = vault_base / Path(file_path)
+    if not vault_path.is_relative_to(vault_base):
+        logger.warning(f"path traversal attempt blocked: {file_path}")
+        raise ValueError(f"Invalid path: {file_path} is outside vault directory")
+    logger.debug(f"validated vault path: {vault_path}")
+    return vault_path
+
+
+def create_error_response(message: str) -> Dict[str, Any]:
+    ''' Create a standardized error response. '''
+    return {"error": message, "success": False}
+
+
+def create_success_response() -> Dict[str, bool]:
+    ''' Create a standardized success response. '''
+    return {"success": True}
+
+
+def create_file_info(path: Path, relative_to: Path) -> Dict[str, str]:
+    ''' Create file information object with vault-relative path. '''
+    relative_path = path.relative_to(relative_to)
+    return {
+        "path": str(relative_path).replace("\\", "/"),
+        "name": path.name
+    }
+
+
+def get_local_datetime() -> datetime:
+    ''' Get current datetime in local timezone, falling back to system timezone. '''
+    try:
+        tz_name = os.getenv('TZ')
+        if tz_name:
+            tz = zoneinfo.ZoneInfo(tz_name)
+            logger.debug(f"using timezone from TZ env var: {tz_name}")
+            return datetime.now(tz)
+        logger.debug("using system local timezone")
+        return datetime.now().astimezone()
+    except Exception as e:
+        logger.warning(f"timezone detection failed, using naive datetime: {e}")
+        return datetime.now()
+
+
+def get_today_journal_path() -> str:
+    ''' Get today's journal entry path in format: journal/YYYY/MM/YYYY-MM-DD.md '''
+    today = get_local_datetime()
+    return f"journal/{today.year}/{today.month:02d}/{today.year}-{today.month:02d}-{today.day:02d}.md"
+
+
+def list_files_in_directory(directory: Path, vault_base: Path, recursive: bool = False) -> List[Dict[str, str]]:
+    ''' List files in a directory with vault-relative paths. '''
+    files = []
+    if not directory.exists():
+        logger.debug(f"directory does not exist: {directory}")
+        return files
+    try:
+        if recursive:
+            for item in directory.rglob("*"):
+                if item.is_file():
+                    files.append(create_file_info(item, vault_base))
+        else:
+            for item in directory.iterdir():
+                if item.is_file():
+                    files.append(create_file_info(item, vault_base))
+        logger.debug(f"listed {len(files)} files in {directory} (recursive={recursive})")
+    except PermissionError:
+        logger.warning(f"permission denied reading directory: {directory}")
+        pass
+    return sorted(files, key=lambda x: x["name"])
+
+
+def list_directories_in_directory(directory: Path, vault_base: Path) -> List[Dict[str, str]]:
+    ''' List subdirectories in a directory with vault-relative paths. '''
+    directories = []
+    if not directory.exists():
+        logger.debug(f"directory does not exist: {directory}")
+        return directories
+    try:
+        for item in directory.iterdir():
+            if item.is_dir():
+                directories.append(create_file_info(item, vault_base))
+        logger.debug(f"listed {len(directories)} directories in {directory}")
+    except PermissionError:
+        logger.warning(f"permission denied reading directory: {directory}")
+        pass
+    return sorted(directories, key=lambda x: x["name"])
+
+
+def is_valid_journal_filename(filename: str, year: str, month: str) -> bool:
+    ''' Check if a filename matches the expected journal entry format. '''
+    pattern = f"^{year}-{month}-\\d{{2}}\\.md$"
+    return bool(re.match(pattern, filename))
+
+
+# mcp server
+
+mcp = FastMCP('Obsidian MCP')
 
 
 @mcp.tool()
@@ -44,30 +270,22 @@ def read_file(file_path: str) -> Dict[str, Any]:
     '''
     try:
         logger.debug(f"read_file called with path: {file_path}")
-        # validate input
         validated_input = FilePathInput(file_path=file_path)
-
-        # validate and resolve vault path
         vault_path = validate_vault_path(validated_input.file_path)
 
-        # check if file exists
         if not vault_path.exists():
             logger.warning(f"file not found: {validated_input.file_path}")
             return create_error_response(f"File not found: {validated_input.file_path}")
 
-        # check if it's actually a file
         if not vault_path.is_file():
             logger.warning(f"path is not a file: {validated_input.file_path}")
             return create_error_response(f"Path is not a file: {validated_input.file_path}")
 
-        # read file content
         try:
-            # try to read as text file
             content = vault_path.read_text(encoding='utf-8')
             logger.info(f"successfully read file: {validated_input.file_path} ({len(content)} chars)")
             return {"content": content}
         except UnicodeDecodeError:
-            # if it's a binary file, return error
             logger.warning(f"cannot read binary file: {validated_input.file_path}")
             return create_error_response(f"Cannot read binary file: {validated_input.file_path}")
 
@@ -97,16 +315,10 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
     '''
     try:
         logger.debug(f"write_file called with path: {file_path} ({len(content)} chars)")
-        # validate input
         validated_input = FileWriteInput(file_path=file_path, content=content)
-
-        # validate and resolve vault path
         vault_path = validate_vault_path(validated_input.file_path)
 
-        # create parent directories if they don't exist
         vault_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # write file content
         vault_path.write_text(validated_input.content, encoding='utf-8')
         logger.info(f"successfully wrote file: {validated_input.file_path}")
 
@@ -168,7 +380,6 @@ def list_todays_journal_entry() -> Dict[str, Any]:
         logger.debug("list_todays_journal_entry called")
         journal_path = get_today_journal_path()
         logger.info(f"today's journal path: {journal_path}")
-        # return the path info regardless of whether file exists
         return {
             "path": journal_path,
             "name": Path(journal_path).name
@@ -265,6 +476,7 @@ guidelines:
 - focus on why and how, not just what
 '''
 
+
 @mcp.tool()
 def start_daily_notes_session() -> str:
     '''
@@ -296,16 +508,13 @@ def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[s
     '''
     try:
         logger.debug(f"list_journal_entries_by_year_and_month called: year={year}, month={month}")
-        # validate input
         validated_input = YearMonthInput(year=year, month=month)
 
         vault_base = get_vault_base()
         journal_dir = vault_base / "journal" / validated_input.year / validated_input.month
 
-        # get all files in the journal directory
         files = list_files_in_directory(journal_dir, vault_base)
 
-        # filter for markdown files with correct date format
         journal_entries = []
         for file_info in files:
             file_path = Path(file_info["path"])
@@ -343,7 +552,6 @@ def list_projects() -> List[Dict[str, str]]:
         vault_base = get_vault_base()
         projects_dir = vault_base / "projects"
 
-        # get all subdirectories in the projects directory
         projects = list_directories_in_directory(projects_dir, vault_base)
         logger.info(f"found {len(projects)} projects")
 
@@ -370,13 +578,11 @@ def list_project_content(project: str) -> List[Dict[str, str]]:
     '''
     try:
         logger.debug(f"list_project_content called: project={project}")
-        # validate input
         validated_input = ProjectInput(project=project)
 
         vault_base = get_vault_base()
         project_dir = vault_base / "projects" / validated_input.project
 
-        # check if project directory exists
         if not project_dir.exists():
             logger.warning(f"project not found: {validated_input.project}")
             return [create_error_response(f"Project not found: {validated_input.project}")]
@@ -385,7 +591,6 @@ def list_project_content(project: str) -> List[Dict[str, str]]:
             logger.warning(f"project is not a directory: {validated_input.project}")
             return [create_error_response(f"Project is not a directory: {validated_input.project}")]
 
-        # get all files recursively in the project directory
         files = list_files_in_directory(project_dir, vault_base, recursive=True)
         logger.info(f"found {len(files)} files in project: {validated_input.project}")
 
@@ -415,13 +620,11 @@ def create_project(project: str) -> Dict[str, Any]:
     '''
     try:
         logger.debug(f"create_project called: project={project}")
-        # validate input
         validated_input = ProjectInput(project=project)
 
         vault_base = get_vault_base()
         project_dir = vault_base / "projects" / validated_input.project
 
-        # create the directory (parents=True creates projects dir if it doesn't exist)
         project_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"successfully created project: {validated_input.project}")
 
@@ -455,10 +658,7 @@ def list_wiki() -> List[Dict[str, str]]:
         vault_base = get_vault_base()
         wiki_dir = vault_base / "wiki"
 
-        # get all files in the wiki directory (non-recursive)
         files = list_files_in_directory(wiki_dir, vault_base, recursive=False)
-
-        # filter to markdown files only
         articles = [f for f in files if Path(f["path"]).suffix == ".md"]
 
         logger.info(f"found {len(articles)} wiki articles")
@@ -489,10 +689,7 @@ def list_prompts() -> List[Dict[str, str]]:
         vault_base = get_vault_base()
         prompts_dir = vault_base / "prompts"
 
-        # get all files in the prompts directory (non-recursive)
         files = list_files_in_directory(prompts_dir, vault_base, recursive=False)
-
-        # filter to markdown files only
         prompts = [f for f in files if Path(f["path"]).suffix == ".md"]
 
         logger.info(f"found {len(prompts)} agent prompts")
@@ -522,23 +719,19 @@ def read_prompt(prompt: str) -> Dict[str, Any]:
     '''
     try:
         logger.debug(f"read_prompt called with: {prompt}")
-        # validate input
         validated_input = PromptInput(prompt=prompt)
 
         vault_base = get_vault_base()
         prompt_path = vault_base / "prompts" / validated_input.prompt
 
-        # check if file exists
         if not prompt_path.exists():
             logger.warning(f"prompt not found: {validated_input.prompt}")
             return create_error_response(f"Prompt not found: {validated_input.prompt}")
 
-        # check if it's actually a file
         if not prompt_path.is_file():
             logger.warning(f"prompt is not a file: {validated_input.prompt}")
             return create_error_response(f"Prompt is not a file: {validated_input.prompt}")
 
-        # read file content
         content = prompt_path.read_text(encoding='utf-8')
         logger.info(f"successfully read prompt: {validated_input.prompt} ({len(content)} chars)")
         return {"content": content}
@@ -554,42 +747,46 @@ def read_prompt(prompt: str) -> Dict[str, Any]:
         return create_error_response(f"Unexpected error reading prompt: {e}")
 
 
-def run():
-    ''' Main entry point for the MCP server. '''
+# entry point
 
-    # configure logging
+def run():
     logging.basicConfig(
         level=logging.DEBUG if os.getenv('LOG_LEVEL', 'info').lower() == 'debug' else logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler()]
     )
 
+    args = parse_args()
+
+    if not args.vault:
+        logger.error('vault path is required (--vault or OBSIDIAN_VAULT_PATH env var)')
+        raise SystemExit(1)
+
+    set_vault_path(args.vault)
+
+    logger.info('starting Obsidian MCP server')
+
     try:
-        logger.info("starting obsidian MCP server")
-
-        # validate that vault path is configured
         vault_base = get_vault_base()
-        logger.info(f"vault path configured: {vault_base}")
+        logger.info(f'vault path configured: {vault_base}')
 
-        # ensure vault directory exists
         if not vault_base.exists():
-            logger.error(f"vault directory does not exist: {vault_base}")
-            print(f"Error: Vault directory does not exist: {vault_base}", file=sys.stderr)
-            sys.exit(1)
-        if not vault_base.is_dir():
-            logger.error(f"vault path is not a directory: {vault_base}")
-            print(f"Error: Vault path is not a directory: {vault_base}", file=sys.stderr)
-            sys.exit(1)
+            logger.error(f'vault directory does not exist: {vault_base}')
+            raise SystemExit(1)
 
-        # run the server
+        if not vault_base.is_dir():
+            logger.error(f'vault path is not a directory: {vault_base}')
+            raise SystemExit(1)
+
         mcp.run()
 
-    except ValueError as e:
-        logger.exception(f"configuration error: {e}")
-        print(f"Configuration error: {e}", file=sys.stderr)
-        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info('server shutdown requested')
 
     except Exception as e:
-        logger.exception(f"unexpected error: {e}")
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        sys.exit(1)
+        logger.error(f'server error: {e}')
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    run()

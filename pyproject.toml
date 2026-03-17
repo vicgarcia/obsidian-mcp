@@ -1,13 +1,13 @@
 [project]
 name = "obsidian-mcp"
-version = "1.0.0"
-description = "An MCP server for accessing an opinionated take on Obsidian"
+version = "2.0.0"
+description = "MCP server for accessing an opinionated Obsidian vault"
 authors = [
     { name = "vic Garcia", email = "vic.garcia@outlook.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "fastmcp>=2.11.3",
+    "mcp>=1.0.0",
     "pydantic>=2.0.0",
 ]
 
@@ -18,15 +18,15 @@ test = [
 ]
 
 [project.scripts]
-obsidian-mcp = "obsidian_mcp.server:run"
+obsidian-mcp = "obsidian_mcp:run"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+testpaths = ["."]
+python_files = ["obsidian_mcp_test.py"]
 python_functions = ["test_*"]
 addopts = ["-v"]
 env = [
