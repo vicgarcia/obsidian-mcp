@@ -1,0 +1,3 @@
+'''
+Obsidian MCP test suite.
+'''

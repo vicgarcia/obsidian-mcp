@@ -15,10 +15,32 @@ the server assumes your vault is organized like this:
 
 ```
 vault/
-├── journal/YYYY/MM/YYYY-MM-DD.md   # daily journal entries
-├── projects/project name/           # project directories with docs
-└── wiki/topic name.md              # standalone wiki articles
+├── journal/
+│   └── 2025/
+│       ├── 01/
+│       │   ├── 2025-01-15.md
+│       │   ├── 2025-01-16.md
+│       │   └── 2025-01-17.md
+│       └── 02/
+│           ├── 2025-02-01.md
+│           └── 2025-02-02.md
+├── projects/
+│   ├── home automation/
+│   │   ├── architecture.md
+│   │   ├── sensor notes.md
+│   │   └── todo.md
+│   └── blog redesign/
+│       ├── requirements.md
+│       └── wireframes.md
+└── wiki/
+    ├── docker networking.md
+    ├── python asyncio.md
+    └── git workflows.md
 ```
+
+- **journal**: daily entries organized by `YYYY/MM/YYYY-MM-DD.md`
+- **projects**: directories for ongoing work with related docs
+- **wiki**: standalone articles on specific topics (flat structure)
 
 #### option 1: install with uv
 
@@ -59,9 +81,9 @@ claude desktop config:
 
 replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
-## features
+## tools
 
-this mcp server exposes tools to interact with your obsidian vault.
+this mcp server exposes 10 tools to interact with your obsidian vault.
 
 #### read_file / write_file
 
@@ -145,10 +167,19 @@ uv run pytest
 
 ```
 obsidian-mcp/
-├── obsidian_mcp.py       # single-file module (server + all logic)
-├── obsidian_mcp_test.py  # tests
-├── pyproject.toml        # package metadata and dependencies
-├── Dockerfile            # docker deployment
+├── src/obsidian_mcp/
+│   ├── __init__.py       # package init, version
+│   ├── server.py         # FastMCP server + 10 tools
+│   ├── vault_client.py   # vault operations (context manager)
+│   └── schema.py         # pydantic validation models
+├── tests/
+│   ├── conftest.py       # pytest fixtures
+│   ├── test_schema.py
+│   ├── test_vault_client.py
+│   ├── test_tools.py
+│   └── test_integration.py
+├── pyproject.toml
+├── Dockerfile
 └── README.md
 ```
 
