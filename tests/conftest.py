@@ -1,107 +1,69 @@
-import os
+'''
+Pytest configuration and fixtures for Obsidian MCP tests.
+'''
+
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock
-
-# set the test vault path
-TEST_VAULT_PATH = Path(__file__).parent / "fixtures" / "vault"
 
 
-@pytest.fixture(autouse=True)
-def setup_test_environment(monkeypatch):
-    ''' set up the test environment with the test vault path. '''
-    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(TEST_VAULT_PATH.absolute()))
+SEED_JOURNAL_CONTENT = '''# January 15, 2025 - Wednesday
 
+## Daily Notes
 
-@pytest.fixture
-def vault_path():
-    ''' return the test vault path. '''
-    return TEST_VAULT_PATH
+### Goals for Today
+- Complete the Obsidian MCP server implementation
+- Test all functionality
 
+### Accomplishments
+- Successfully built the MCP server
+- Implemented all required tools
 
-@pytest.fixture
-def mock_mcp_server():
-    ''' create a mock MCP server for testing tool registration. '''
-    mock_server = MagicMock()
-    mock_server.tool = lambda: lambda func: func  # simple decorator that returns the function
-    return mock_server
+### Reflections
+- The FastMCP framework makes it easy to build MCP servers
+- Proper input validation is crucial for security
+
+---
+
+## Tags
+#journal #2025 #january
+'''
 
 
 @pytest.fixture
-def sample_journal_entries():
-    ''' create sample journal entries for testing. '''
-    return [
-        {"path": "journal/2025/01/2025-01-15.md", "name": "2025-01-15.md"},
-        {"path": "journal/2025/01/2025-01-16.md", "name": "2025-01-16.md"},
-    ]
+def vault_path(tmp_path):
+    '''
+    Create a temporary vault for testing.
 
+    Uses tmp_path (pytest built-in) so each test gets a fresh vault
+    and all test artifacts are automatically cleaned up.
+    '''
+    vault = tmp_path / 'vault'
+    vault.mkdir()
 
-@pytest.fixture
-def sample_file_content():
-    ''' sample markdown file content for testing. '''
-    return """# Test Note
+    # create standard directories
+    (vault / 'journal').mkdir()
+    (vault / 'projects').mkdir()
+    (vault / 'wiki').mkdir()
 
-This is a test note for the Obsidian MCP server.
+    # create seed journal entry
+    journal_dir = vault / 'journal' / '2025' / '01'
+    journal_dir.mkdir(parents=True)
+    (journal_dir / '2025-01-15.md').write_text(SEED_JOURNAL_CONTENT)
 
-## Content
-
-Some content here with [[links]] and #tags.
-"""
+    return vault
 
 
 @pytest.fixture
 def setup_wiki(vault_path):
-    ''' create sample wiki articles for testing. '''
-    wiki_dir = vault_path / "wiki"
-    wiki_dir.mkdir(parents=True, exist_ok=True)
+    '''Create sample wiki articles for testing.'''
+    wiki_dir = vault_path / 'wiki'
 
-    # clean any existing files first
-    for existing_file in wiki_dir.glob("*"):
-        if existing_file.is_file():
-            existing_file.unlink()
-
-    # create test articles
     articles = {
-        "python-asyncio.md": "# Python Asyncio\n\nComplete guide to async programming.",
-        "docker-networking.md": "# Docker Networking\n\nNetworking concepts in Docker.",
-        "git-workflows.md": "# Git Workflows\n\nBranching strategies and workflows.",
+        'python-asyncio.md': '# Python Asyncio\n\nComplete guide to async programming.',
+        'docker-networking.md': '# Docker Networking\n\nNetworking concepts in Docker.',
+        'git-workflows.md': '# Git Workflows\n\nBranching strategies and workflows.',
     }
 
     for filename, content in articles.items():
         (wiki_dir / filename).write_text(content)
 
-    yield wiki_dir
-
-    # cleanup all files
-    for existing_file in wiki_dir.glob("*"):
-        if existing_file.is_file():
-            existing_file.unlink()
-
-
-@pytest.fixture
-def setup_prompts(vault_path):
-    ''' create sample agent prompts for testing. '''
-    prompts_dir = vault_path / "prompts"
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-
-    # clean any existing files first
-    for existing_file in prompts_dir.glob("*"):
-        if existing_file.is_file():
-            existing_file.unlink()
-
-    # create test prompts
-    prompts = {
-        "code review assistant.md": "# Code Review Assistant\n\nYou are an assistant that will review code.",
-        "documentation writer.md": "# Documentation Writer\n\nYou are an assistant that writes documentation.",
-        "test generator.md": "# Test Generator\n\nYou are an assistant that generates tests.",
-    }
-
-    for filename, content in prompts.items():
-        (prompts_dir / filename).write_text(content)
-
-    yield prompts_dir
-
-    # cleanup all files
-    for existing_file in prompts_dir.glob("*"):
-        if existing_file.is_file():
-            existing_file.unlink()
+    return wiki_dir

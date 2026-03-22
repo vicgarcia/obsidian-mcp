@@ -1,189 +1,146 @@
-# Claude Code Project Context
+# Claude Code Session Documentation
 
 ## Project Overview
+Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 10 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
 
-This is an MCP server for Obsidian vault management. It's intentionally minimal - built to handle journal entries, project tracking, wiki articles, and agent prompts without the complexity of full-featured Obsidian tools.
+Installable via `uv tool install`.
 
-The server provides Claude Desktop and Claude Code with access to:
-- Journal entries organized in a year/month filesystem structure (journal/YYYY/MM/)
-- Project directories for organizing work (projects/)
-- Wiki articles for comprehensive topic documentation (wiki/)
-- Agent prompts for LLM instructions (prompts/)
-- General file read/write operations across the vault
+## Project Structure
+```
+obsidian-mcp/
+├── src/
+│   └── obsidian_mcp/
+│       ├── __init__.py       # package init, version, exports
+│       ├── server.py         # FastMCP server + 10 tools
+│       ├── vault_client.py   # vault operations (context manager)
+│       └── schema.py         # Pydantic validation models
+├── tests/
+│   ├── conftest.py           # pytest fixtures
+│   ├── test_schema.py        # validation model tests
+│   ├── test_vault_client.py  # vault client tests
+│   ├── test_tools.py         # MCP tool tests
+│   └── test_integration.py   # integration tests
+├── pyproject.toml            # package metadata and dependencies
+├── Dockerfile                # docker deployment
+├── README.md                 # user-facing documentation
+└── CLAUDE.md                 # this file
+```
 
-## Current Status
+## External Documentation
 
-Production ready. 12 tools implemented, 52 tests passing, Docker deployment configured.
+### Key References
+- **MCP Documentation**: https://modelcontextprotocol.io - Model Context Protocol specification
+- **Obsidian**: https://obsidian.md - The note-taking app this server interfaces with
 
-This is feature-complete by design. The goal was simplicity, not comprehensiveness.
+## Quick Reference
 
-## Design Philosophy
+### Development Commands
+```bash
+uv tool install --editable .              # install in dev mode
+obsidian-mcp --vault /path/to/vault       # run
+docker build -t obsidian-mcp:local .      # build docker image
+uv run pytest tests/ -v                   # run tests
+```
 
-### Scope: Journal, Projects, Wiki, and Prompts
+### Installation
+```bash
+uv tool install git+https://github.com/vicgarcia/obsidian-mcp
+```
 
-Most Obsidian MCP servers try to expose everything - tags, templates, complex queries, graph analysis, etc. That creates complexity and maintenance overhead.
+### Environment Variables
+- `OBSIDIAN_VAULT_PATH`: Path to vault (default: /vault, or use --vault flag)
+- `TZ`: Timezone for journal dates (e.g., America/New_York)
+- `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
-This server focuses on four core workflows:
-1. **Journal entries**: Daily notes with strict YYYY/MM/DD filesystem hierarchy
-2. **Project tracking**: Simple directory-based organization for ongoing work
-3. **Wiki articles**: Flat directory of comprehensive topic documentation (obsidian wiki)
-4. **Agent prompts**: Read-only access to LLM prompt templates (prompts/)
+## Tools Overview
+Ten core MCP tools (see README.md for full documentation):
+- `read_file` / `write_file` - General file operations
+- `get_current_date` - Current date in multiple formats
+- `list_todays_journal_entry` - Get today's journal path
+- `start_daily_notes_session` - Interactive daily notes workflow
+- `list_journal_entries_by_year_and_month` - List entries for a month
+- `list_projects` / `list_project_content` / `create_project` - Project management
+- `list_wiki` - List wiki articles
 
-No templates, no tag systems. Just files organized in predictable directories.
+## Implementation Notes
 
-### Filesystem Organization
+### Architecture Decisions
+- **Modular package structure**: Separation of concerns into distinct modules
+- **VaultClient context manager**: Clean resource management for vault operations
+- **Schema module**: Centralized Pydantic validation models
+- **MCP FastMCP**: Used for MCP server framework (simpler than raw MCP protocol)
+- **STDIO Transport**: Default for Claude Desktop compatibility
+- **Dual deployment**: `uv tool install` for native, Docker for isolation
 
-See README.md for vault structure diagram.
+### Module Organization
 
-**Journal**: `journal/YYYY/MM/YYYY-MM-DD.md` - month always two digits (01-12), rigid by design for predictable date queries.
+#### schema.py (Data Models)
+- `YearMonthInput` - Year/month validation
+- `FilePathInput` - File path validation with traversal protection
+- `FileWriteInput` - File write input validation
+- `ProjectInput` - Project name validation
+- `create_error_response()` / `create_success_response()` - Response helpers
 
-**Projects**: `projects/project name/` - flat hierarchy, no nesting, use spaces instead of hyphens in names (e.g., `home automation/`, `blog redesign/`).
+#### vault_client.py (Vault Operations)
+- `VaultClient` - Context manager for all vault operations
+- `VaultError` - Custom exception for vault errors
+- File operations: `read_file()`, `write_file()`, `file_exists()`
+- Directory operations: `list_files()`, `list_directories()`, `create_directory()`
+- Journal operations: `get_journal_path()`, `list_journal_entries()`
+- Project operations: `list_projects()`, `list_project_content()`, `create_project()`
+- Wiki operations: `list_wiki()`
 
-**Wiki**: `wiki/topic name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `python asyncio.md`, `docker networking.md`), no metadata/frontmatter.
+#### server.py (MCP Server)
+- FastMCP server initialization
+- 10 `@mcp.tool()` definitions
+- Module-level client singleton
+- Entry point `run()` function
 
-**Prompts**: `prompts/prompt name.md` - flat structure, descriptive filenames with spaces in lowercase (e.g., `code review assistant.md`, `documentation writer.md`), read-only access for agent instructions.
+### Code Quality Features
+- Type hints throughout
+- Consistent error handling patterns: `{"error": "message", "success": False}`
+- Structured logging with configurable levels (all lowercase except proper names)
+- Path security validation (no traversal attacks)
+- Context manager pattern for resource management
 
-### Simplicity Over Features
+### Entry Point Flow
+```python
+run()
+  → logging.basicConfig(...)
+  → parse_args()            # --vault or OBSIDIAN_VAULT_PATH
+  → validate vault exists
+  → _client = VaultClient(...)  # Initialize singleton
+  → mcp.run()               # Start FastMCP server
+```
 
-Every omitted feature is a decision to keep the codebase maintainable:
+## Design Decisions
+
+### What We Built
+- **Modular architecture**: 3 core modules with clear responsibilities
+- **10 tools**: Covering three workflows (files/journal, projects, wiki)
+- **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`
+- **Dual deployment**: uv tool install + Docker
+- **Path validation**: Security-first file operations
+- **Comprehensive test suite**: Tests generated on the fly
+
+### What We Didn't Build
 - No templates (just create files directly)
 - No tag support (filesystem organization is enough)
-- No complex queries (just list and read)
+- No complex queries (let Claude interpret)
 - No file deletion/moving (use read/write instead)
-- No subdirectories in wiki (flat structure only)
 - No metadata parsing (filenames describe content)
 
-Each omitted feature means less code to maintain, fewer edge cases, and faster execution.
+## Code Conventions
 
-## Architecture
-
-### Code Organization
-
-```
-src/obsidian_mcp/
-├── server.py    # all MCP tools live here
-├── models.py    # Pydantic input validation
-└── utils.py     # helper functions
-
-tests/
-├── conftest.py      # pytest fixtures
-├── test_e2e.py      # end-to-end tests
-├── test_models.py   # validation tests
-└── test_utils.py    # utility tests
-```
-
-All MCP tools are in server.py. No need to split into separate modules for such a small tool count.
-
-### Key Decisions
-
-**Pydantic for validation**: Explicit input models catch bad data early. All path inputs, date formats, and file operations go through validation.
-
-**Docker-first deployment**: Simpler than managing Python environments. User permissions map cleanly through Docker's --user flag.
-
-**Timezone awareness**: Journal entries need to respect local time, not UTC. The TZ environment variable handles this.
-
-**No abstraction layers**: Direct path manipulation with pathlib. No ORMs, no query builders, just file operations.
-
-**Logging**: Comprehensive logging throughout using Python's logging module. LOG_LEVEL environment variable (debug/info) controls verbosity. All exceptions logged with full stack traces. All log messages use lowercase except proper names.
-
-## MCP Interface
-
-**Tools (12 total)**
-2 general file operations + 4 journal + 3 project + 1 wiki + 2 prompts = 12 tools total.
-
-No delete/move operations by design. Read and write handle all file modifications. See README.md for detailed tool descriptions.
-
-## Code Style
-
-Non-negotiable conventions:
+### Naming & Style
 - Comments in lowercase (except proper names/symbols)
 - Docstrings use triple single quotes: `''' like this '''`
-- Single-line docstrings have spaces: `''' text '''`
+- Lowercase log messages except proper names
+- Consistent error responses: `{"error": "message", "success": False}`
 - Files end with blank line
-- No file-level docstrings (removed for simplicity)
-- Log messages in lowercase (except proper names like YYYY, TZ, etc.)
+- Single quotes for strings
 
-## Deployment
-
-Docker only. No native installation because Docker handles dependencies and permissions cleanly.
-
-**Why Docker-only**:
-- User permissions map cleanly via --user flag (prevents file ownership issues)
-- No Python environment management
-- Same deployment for Desktop and Code
-- GitHub Actions builds/publishes to GHCR automatically
-
-**Image naming**:
-- Production: `ghcr.io/vicgarcia/obsidian-mcp:latest`
-- Local dev: `ghcr.io/vicgarcia/obsidian-mcp:local` (via ./build.sh)
-
-**Setup details**: See README.md for full Claude Desktop and Claude Code configuration commands.
-
-**Environment variables**:
-- `TZ` (required) - timezone for journal date calculations (e.g., America/New_York)
-- `LOG_LEVEL` (optional) - debug or info, defaults to info
-- `OBSIDIAN_VAULT_PATH` - set internally to /vault, not needed in user config
-
-## Security
-
-**Path validation**: All file paths validated against vault root using `pathlib.Path.is_relative_to()`. No traversal attacks.
-
-**Input sanitization**: Pydantic models validate formats before any file operations.
-
-**Principle of least privilege**: Docker runs as specified user, not root. File permissions stay correct.
-
-## Testing
-
-52 tests covering:
-- Input validation (models) - 14 tests
-- Path operations (utils) - 11 tests
-- File operations (e2e) - 6 tests
-- Journal tools (e2e) - 3 tests
-- Project tools (e2e) - 5 tests
-- Wiki tools (e2e) - 5 tests
-- Prompt tools (e2e) - 6 tests
-- Integration workflows (e2e) - 2 tests
-
-Fast execution (< 1 second). No coverage reporting because it's overhead without value for this codebase size.
-
-Run:
-```bash
-uv run pytest
-```
-
-## Dependencies
-
-Minimal:
-- FastMCP (>= 2.11.3) - MCP framework
-- Pydantic (>= 2.0.0) - validation
-- Python 3.12+ - runtime
-
-No database, no web framework, no query engines.
-
-## Context for Future Sessions
-
-- This is feature-complete by design
-- Focus is maintenance and bug fixes, not new features
-- Don't add removed functionality (templates) without explicit request
-- Architecture decisions were intentional, not accidental
-- Simplicity is the goal, not comprehensiveness
-
-Current scope: journal entries + project tracking + wiki articles + agent prompts. No templates, no complex queries, no metadata parsing.
-
-## Development Workflow
-
-1. Changes go through tests first
-2. Code style rules are non-negotiable
-3. Keep dependencies minimal
-4. Docker is the deployment path
-5. Don't break the 12-tool interface
-
-## Entry Points
-
-- **Console script**: `obsidian-mcp` (configured in pyproject.toml)
-- **Main function**: `obsidian_mcp.server.run()`
-- **Package import**: `from obsidian_mcp import run`
-- **No `__main__` blocks**: Entry point configured via pyproject.toml only
-- **No `__all__` exports**: Keep imports simple
-
-That's it. Simple project, simple rules.
+### Testing
+- Tests organized by module (test_schema.py, test_vault_client.py, test_tools.py)
+- Integration tests in test_integration.py
+- Test data generated on the fly using pytest tmp_path

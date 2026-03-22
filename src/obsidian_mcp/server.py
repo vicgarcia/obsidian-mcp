@@ -1,35 +1,78 @@
-from typing import Dict, Any, List
+'''
+Obsidian MCP server with FastMCP tools.
+
+Provides MCP tools for interacting with an Obsidian vault including
+file operations, journal management, project organization, and wiki articles.
+'''
+
+import argparse
+import logging
 import os
-import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
-from .models import (
+from obsidian_mcp.schema import (
     FilePathInput,
     FileWriteInput,
-    YearMonthInput,
     ProjectInput,
-    PromptInput,
-)
-from .utils import (
-    get_vault_base,
-    validate_vault_path,
+    YearMonthInput,
     create_error_response,
     create_success_response,
-    get_today_journal_path,
-    list_files_in_directory,
-    list_directories_in_directory,
-    is_valid_journal_filename,
 )
+from obsidian_mcp.vault_client import VaultClient, VaultError
 
-import logging
 logger = logging.getLogger(__name__)
 
+_HELP = '''
+environment variables:
+  OBSIDIAN_VAULT_PATH   Path to the Obsidian vault directory
+  TZ                    Timezone for journal dates (e.g., America/New_York)
+  LOG_LEVEL             Logging level (debug or info, default: info)
+'''
 
-mcp = FastMCP("Obsidian MCP Server")
+# module-level client singleton
+_client: Optional[VaultClient] = None
 
+
+def parse_args() -> argparse.Namespace:
+    '''Parse command line arguments.'''
+    parser = argparse.ArgumentParser(
+        prog='obsidian-mcp',
+        description='Obsidian MCP server',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_HELP
+    )
+    parser.add_argument(
+        '--vault',
+        default=os.getenv('OBSIDIAN_VAULT_PATH', '/vault'),
+        metavar='PATH',
+        help='path to Obsidian vault (or OBSIDIAN_VAULT_PATH env var)'
+    )
+    return parser.parse_args()
+
+
+def get_client() -> VaultClient:
+    '''Get the vault client singleton.'''
+    if _client is None:
+        raise RuntimeError('Vault client not initialized')
+    return _client
+
+
+def format_error(error: Exception) -> Dict[str, Any]:
+    '''Format an exception as an error response.'''
+    return create_error_response(str(error))
+
+
+# mcp server
+
+mcp = FastMCP('Obsidian MCP')
+
+
+# file tools
 
 @mcp.tool()
 def read_file(file_path: str) -> Dict[str, Any]:
@@ -43,43 +86,22 @@ def read_file(file_path: str) -> Dict[str, Any]:
         Dictionary with file content or error message
     '''
     try:
-        logger.debug(f"read_file called with path: {file_path}")
-        # validate input
+        logger.debug(f'read_file called with path: {file_path}')
         validated_input = FilePathInput(file_path=file_path)
 
-        # validate and resolve vault path
-        vault_path = validate_vault_path(validated_input.file_path)
-
-        # check if file exists
-        if not vault_path.exists():
-            logger.warning(f"file not found: {validated_input.file_path}")
-            return create_error_response(f"File not found: {validated_input.file_path}")
-
-        # check if it's actually a file
-        if not vault_path.is_file():
-            logger.warning(f"path is not a file: {validated_input.file_path}")
-            return create_error_response(f"Path is not a file: {validated_input.file_path}")
-
-        # read file content
-        try:
-            # try to read as text file
-            content = vault_path.read_text(encoding='utf-8')
-            logger.info(f"successfully read file: {validated_input.file_path} ({len(content)} chars)")
-            return {"content": content}
-        except UnicodeDecodeError:
-            # if it's a binary file, return error
-            logger.warning(f"cannot read binary file: {validated_input.file_path}")
-            return create_error_response(f"Cannot read binary file: {validated_input.file_path}")
+        with get_client() as vault:
+            content = vault.read_file(validated_input.file_path)
+            return {'content': content}
 
     except ValidationError as e:
-        logger.error(f"validation error reading file: {e}")
-        return create_error_response(f"Invalid input: {e}")
-    except ValueError as e:
-        logger.error(f"value error reading file: {e}")
-        return create_error_response(str(e))
+        logger.error(f'validation error reading file: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error reading file: {e}')
+        return format_error(e)
     except Exception as e:
-        logger.exception(f"unexpected error reading file: {e}")
-        return create_error_response(f"Unexpected error reading file: {e}")
+        logger.exception(f'unexpected error reading file: {e}')
+        return create_error_response(f'Unexpected error reading file: {e}')
 
 
 @mcp.tool()
@@ -96,32 +118,25 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
         Dictionary with success indicator or error message
     '''
     try:
-        logger.debug(f"write_file called with path: {file_path} ({len(content)} chars)")
-        # validate input
+        logger.debug(f'write_file called with path: {file_path} ({len(content)} chars)')
         validated_input = FileWriteInput(file_path=file_path, content=content)
 
-        # validate and resolve vault path
-        vault_path = validate_vault_path(validated_input.file_path)
-
-        # create parent directories if they don't exist
-        vault_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # write file content
-        vault_path.write_text(validated_input.content, encoding='utf-8')
-        logger.info(f"successfully wrote file: {validated_input.file_path}")
-
-        return create_success_response()
+        with get_client() as vault:
+            vault.write_file(validated_input.file_path, validated_input.content)
+            return create_success_response()
 
     except ValidationError as e:
-        logger.error(f"validation error writing file: {e}")
-        return create_error_response(f"Invalid input: {e}")
-    except ValueError as e:
-        logger.error(f"value error writing file: {e}")
-        return create_error_response(str(e))
+        logger.error(f'validation error writing file: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error writing file: {e}')
+        return format_error(e)
     except Exception as e:
-        logger.exception(f"unexpected error writing file: {e}")
-        return create_error_response(f"Unexpected error writing file: {e}")
+        logger.exception(f'unexpected error writing file: {e}')
+        return create_error_response(f'Unexpected error writing file: {e}')
 
+
+# date tools
 
 @mcp.tool()
 def get_current_date() -> Dict[str, str]:
@@ -132,19 +147,21 @@ def get_current_date() -> Dict[str, str]:
         Dictionary with date in YYYY-MM-DD format and human-readable format
     '''
     try:
-        logger.debug("get_current_date called")
+        logger.debug('get_current_date called')
         now = datetime.now()
-        formatted_date = now.strftime("%Y-%m-%d")
-        human_date = now.strftime("%A %B %d, %Y")
-        logger.info(f"current date: {formatted_date} ({human_date})")
+        formatted_date = now.strftime('%Y-%m-%d')
+        human_date = now.strftime('%A %B %d, %Y')
+        logger.info(f'current date: {formatted_date} ({human_date})')
         return {
-            "formatted": formatted_date,
-            "human": human_date
+            'formatted': formatted_date,
+            'human': human_date
         }
     except Exception as e:
-        logger.exception(f"unexpected error getting current date: {e}")
-        return create_error_response(f"Unexpected error getting current date: {e}")
+        logger.exception(f'unexpected error getting current date: {e}')
+        return create_error_response(f'Unexpected error getting current date: {e}')
 
+
+# journal tools
 
 @mcp.tool()
 def list_todays_journal_entry() -> Dict[str, Any]:
@@ -165,20 +182,20 @@ def list_todays_journal_entry() -> Dict[str, Any]:
         Dictionary with today's journal entry path and name
     '''
     try:
-        logger.debug("list_todays_journal_entry called")
-        journal_path = get_today_journal_path()
-        logger.info(f"today's journal path: {journal_path}")
-        # return the path info regardless of whether file exists
-        return {
-            "path": journal_path,
-            "name": Path(journal_path).name
-        }
-    except ValueError as e:
-        logger.error(f"value error getting today's journal entry: {e}")
-        return create_error_response(str(e))
+        logger.debug('list_todays_journal_entry called')
+        with get_client() as vault:
+            journal_path = vault.get_journal_path()
+            logger.info(f"today's journal path: {journal_path}")
+            return {
+                'path': journal_path,
+                'name': Path(journal_path).name
+            }
+    except VaultError as e:
+        logger.error(f'vault error getting journal entry: {e}')
+        return format_error(e)
     except Exception as e:
-        logger.exception(f"unexpected error getting today's journal entry: {e}")
-        return create_error_response(f"Unexpected error getting today's journal entry: {e}")
+        logger.exception(f'unexpected error getting today\'s journal entry: {e}')
+        return create_error_response(f'Unexpected error getting today\'s journal entry: {e}')
 
 
 DAILY_NOTES_PROMPT = '''
@@ -265,6 +282,7 @@ guidelines:
 - focus on why and how, not just what
 '''
 
+
 @mcp.tool()
 def start_daily_notes_session() -> str:
     '''
@@ -277,7 +295,7 @@ def start_daily_notes_session() -> str:
         Prompt instructions for the daily notes workflow
     '''
     now = datetime.now()
-    today = now.strftime("%A %B %d, %Y")
+    today = now.strftime('%A %B %d, %Y')
     return DAILY_NOTES_PROMPT.format(today=today)
 
 
@@ -295,36 +313,25 @@ def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[s
         List of journal entries with metadata
     '''
     try:
-        logger.debug(f"list_journal_entries_by_year_and_month called: year={year}, month={month}")
-        # validate input
+        logger.debug(f'list_journal_entries_by_year_and_month called: year={year}, month={month}')
         validated_input = YearMonthInput(year=year, month=month)
 
-        vault_base = get_vault_base()
-        journal_dir = vault_base / "journal" / validated_input.year / validated_input.month
-
-        # get all files in the journal directory
-        files = list_files_in_directory(journal_dir, vault_base)
-
-        # filter for markdown files with correct date format
-        journal_entries = []
-        for file_info in files:
-            file_path = Path(file_info["path"])
-            if file_path.suffix == ".md" and is_valid_journal_filename(file_path.name, validated_input.year, validated_input.month):
-                journal_entries.append(file_info)
-
-        logger.info(f"found {len(journal_entries)} journal entries for {year}/{month}")
-        return sorted(journal_entries, key=lambda x: x["name"])
+        with get_client() as vault:
+            entries = vault.list_journal_entries(validated_input.year, validated_input.month)
+            return entries
 
     except ValidationError as e:
-        logger.error(f"validation error listing journal entries: {e}")
-        return [create_error_response(f"Invalid input: {e}")]
-    except ValueError as e:
-        logger.error(f"value error listing journal entries: {e}")
-        return [create_error_response(str(e))]
+        logger.error(f'validation error listing journal entries: {e}')
+        return [create_error_response(f'Invalid input: {e}')]
+    except VaultError as e:
+        logger.error(f'vault error listing journal entries: {e}')
+        return [format_error(e)]
     except Exception as e:
-        logger.exception(f"unexpected error listing journal entries: {e}")
-        return [create_error_response(f"Unexpected error listing journal entries: {e}")]
+        logger.exception(f'unexpected error listing journal entries: {e}')
+        return [create_error_response(f'Unexpected error listing journal entries: {e}')]
 
+
+# project tools
 
 @mcp.tool()
 def list_projects() -> List[Dict[str, str]]:
@@ -339,22 +346,15 @@ def list_projects() -> List[Dict[str, str]]:
         List of project directories with metadata
     '''
     try:
-        logger.debug("list_projects called")
-        vault_base = get_vault_base()
-        projects_dir = vault_base / "projects"
-
-        # get all subdirectories in the projects directory
-        projects = list_directories_in_directory(projects_dir, vault_base)
-        logger.info(f"found {len(projects)} projects")
-
-        return projects
-
-    except ValueError as e:
-        logger.error(f"value error listing projects: {e}")
-        return [create_error_response(str(e))]
+        logger.debug('list_projects called')
+        with get_client() as vault:
+            return vault.list_projects()
+    except VaultError as e:
+        logger.error(f'vault error listing projects: {e}')
+        return [format_error(e)]
     except Exception as e:
-        logger.exception(f"unexpected error listing projects: {e}")
-        return [create_error_response(f"Unexpected error listing projects: {e}")]
+        logger.exception(f'unexpected error listing projects: {e}')
+        return [create_error_response(f'Unexpected error listing projects: {e}')]
 
 
 @mcp.tool()
@@ -369,37 +369,21 @@ def list_project_content(project: str) -> List[Dict[str, str]]:
         List of files and directories with metadata
     '''
     try:
-        logger.debug(f"list_project_content called: project={project}")
-        # validate input
+        logger.debug(f'list_project_content called: project={project}')
         validated_input = ProjectInput(project=project)
 
-        vault_base = get_vault_base()
-        project_dir = vault_base / "projects" / validated_input.project
-
-        # check if project directory exists
-        if not project_dir.exists():
-            logger.warning(f"project not found: {validated_input.project}")
-            return [create_error_response(f"Project not found: {validated_input.project}")]
-
-        if not project_dir.is_dir():
-            logger.warning(f"project is not a directory: {validated_input.project}")
-            return [create_error_response(f"Project is not a directory: {validated_input.project}")]
-
-        # get all files recursively in the project directory
-        files = list_files_in_directory(project_dir, vault_base, recursive=True)
-        logger.info(f"found {len(files)} files in project: {validated_input.project}")
-
-        return files
+        with get_client() as vault:
+            return vault.list_project_content(validated_input.project)
 
     except ValidationError as e:
-        logger.error(f"validation error listing project content: {e}")
-        return [create_error_response(f"Invalid input: {e}")]
-    except ValueError as e:
-        logger.error(f"value error listing project content: {e}")
-        return [create_error_response(str(e))]
+        logger.error(f'validation error listing project content: {e}')
+        return [create_error_response(f'Invalid input: {e}')]
+    except VaultError as e:
+        logger.error(f'vault error listing project content: {e}')
+        return [format_error(e)]
     except Exception as e:
-        logger.exception(f"unexpected error listing project content: {e}")
-        return [create_error_response(f"Unexpected error listing project content: {e}")]
+        logger.exception(f'unexpected error listing project content: {e}')
+        return [create_error_response(f'Unexpected error listing project content: {e}')]
 
 
 @mcp.tool()
@@ -414,29 +398,25 @@ def create_project(project: str) -> Dict[str, Any]:
         Success indicator or error message
     '''
     try:
-        logger.debug(f"create_project called: project={project}")
-        # validate input
+        logger.debug(f'create_project called: project={project}')
         validated_input = ProjectInput(project=project)
 
-        vault_base = get_vault_base()
-        project_dir = vault_base / "projects" / validated_input.project
-
-        # create the directory (parents=True creates projects dir if it doesn't exist)
-        project_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"successfully created project: {validated_input.project}")
-
-        return create_success_response()
+        with get_client() as vault:
+            vault.create_project(validated_input.project)
+            return create_success_response()
 
     except ValidationError as e:
-        logger.error(f"validation error creating project: {e}")
-        return create_error_response(f"Invalid input: {e}")
-    except ValueError as e:
-        logger.error(f"value error creating project: {e}")
-        return create_error_response(str(e))
+        logger.error(f'validation error creating project: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error creating project: {e}')
+        return format_error(e)
     except Exception as e:
-        logger.exception(f"unexpected error creating project: {e}")
-        return create_error_response(f"Unexpected error creating project: {e}")
+        logger.exception(f'unexpected error creating project: {e}')
+        return create_error_response(f'Unexpected error creating project: {e}')
 
+
+# wiki tools
 
 @mcp.tool()
 def list_wiki() -> List[Dict[str, str]]:
@@ -451,145 +431,61 @@ def list_wiki() -> List[Dict[str, str]]:
         List of markdown files with metadata
     '''
     try:
-        logger.debug("list_wiki called")
-        vault_base = get_vault_base()
-        wiki_dir = vault_base / "wiki"
-
-        # get all files in the wiki directory (non-recursive)
-        files = list_files_in_directory(wiki_dir, vault_base, recursive=False)
-
-        # filter to markdown files only
-        articles = [f for f in files if Path(f["path"]).suffix == ".md"]
-
-        logger.info(f"found {len(articles)} wiki articles")
-        return articles
-
-    except ValueError as e:
-        logger.error(f"value error listing wiki: {e}")
-        return [create_error_response(str(e))]
+        logger.debug('list_wiki called')
+        with get_client() as vault:
+            return vault.list_wiki()
+    except VaultError as e:
+        logger.error(f'vault error listing wiki: {e}')
+        return [format_error(e)]
     except Exception as e:
-        logger.exception(f"unexpected error listing wiki: {e}")
-        return [create_error_response(f"Unexpected error listing wiki: {e}")]
+        logger.exception(f'unexpected error listing wiki: {e}')
+        return [create_error_response(f'Unexpected error listing wiki: {e}')]
 
 
-@mcp.tool()
-def list_prompts() -> List[Dict[str, str]]:
-    '''
-    List all agent prompts in the prompts directory.
-
-    Agent prompts are markdown files intended to be used as system prompts or instructions
-    for LLM agents. Use descriptive filenames with spaces in lowercase (e.g., "code review
-    assistant.md", "documentation writer.md") in a flat directory structure.
-
-    Returns:
-        List of prompt files with metadata
-    '''
-    try:
-        logger.debug("list_prompts called")
-        vault_base = get_vault_base()
-        prompts_dir = vault_base / "prompts"
-
-        # get all files in the prompts directory (non-recursive)
-        files = list_files_in_directory(prompts_dir, vault_base, recursive=False)
-
-        # filter to markdown files only
-        prompts = [f for f in files if Path(f["path"]).suffix == ".md"]
-
-        logger.info(f"found {len(prompts)} agent prompts")
-        return prompts
-
-    except ValueError as e:
-        logger.error(f"value error listing prompts: {e}")
-        return [create_error_response(str(e))]
-    except Exception as e:
-        logger.exception(f"unexpected error listing prompts: {e}")
-        return [create_error_response(f"Unexpected error listing prompts: {e}")]
-
-
-@mcp.tool()
-def read_prompt(prompt: str) -> Dict[str, Any]:
-    '''
-    Read an agent prompt from the prompts directory.
-
-    Agent prompts are markdown files intended to be used as system prompts or instructions
-    for LLM agents. Pass the filename (e.g., "code review assistant.md") to read its content.
-
-    Args:
-        prompt: Filename of the prompt to read (e.g., "code review assistant.md")
-
-    Returns:
-        Dictionary with prompt content or error message
-    '''
-    try:
-        logger.debug(f"read_prompt called with: {prompt}")
-        # validate input
-        validated_input = PromptInput(prompt=prompt)
-
-        vault_base = get_vault_base()
-        prompt_path = vault_base / "prompts" / validated_input.prompt
-
-        # check if file exists
-        if not prompt_path.exists():
-            logger.warning(f"prompt not found: {validated_input.prompt}")
-            return create_error_response(f"Prompt not found: {validated_input.prompt}")
-
-        # check if it's actually a file
-        if not prompt_path.is_file():
-            logger.warning(f"prompt is not a file: {validated_input.prompt}")
-            return create_error_response(f"Prompt is not a file: {validated_input.prompt}")
-
-        # read file content
-        content = prompt_path.read_text(encoding='utf-8')
-        logger.info(f"successfully read prompt: {validated_input.prompt} ({len(content)} chars)")
-        return {"content": content}
-
-    except ValidationError as e:
-        logger.error(f"validation error reading prompt: {e}")
-        return create_error_response(f"Invalid input: {e}")
-    except ValueError as e:
-        logger.error(f"value error reading prompt: {e}")
-        return create_error_response(str(e))
-    except Exception as e:
-        logger.exception(f"unexpected error reading prompt: {e}")
-        return create_error_response(f"Unexpected error reading prompt: {e}")
-
+# entry point
 
 def run():
-    ''' Main entry point for the MCP server. '''
+    '''Main entry point for the Obsidian MCP server.'''
+    global _client
 
-    # configure logging
     logging.basicConfig(
         level=logging.DEBUG if os.getenv('LOG_LEVEL', 'info').lower() == 'debug' else logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler()]
     )
 
+    args = parse_args()
+
+    if not args.vault:
+        logger.error('vault path is required (--vault or OBSIDIAN_VAULT_PATH env var)')
+        raise SystemExit(1)
+
+    logger.info('starting Obsidian MCP server')
+
     try:
-        logger.info("starting obsidian MCP server")
+        vault_path = Path(args.vault).resolve()
+        logger.info(f'vault path configured: {vault_path}')
 
-        # validate that vault path is configured
-        vault_base = get_vault_base()
-        logger.info(f"vault path configured: {vault_base}")
+        if not vault_path.exists():
+            logger.error(f'vault directory does not exist: {vault_path}')
+            raise SystemExit(1)
 
-        # ensure vault directory exists
-        if not vault_base.exists():
-            logger.error(f"vault directory does not exist: {vault_base}")
-            print(f"Error: Vault directory does not exist: {vault_base}", file=sys.stderr)
-            sys.exit(1)
-        if not vault_base.is_dir():
-            logger.error(f"vault path is not a directory: {vault_base}")
-            print(f"Error: Vault path is not a directory: {vault_base}", file=sys.stderr)
-            sys.exit(1)
+        if not vault_path.is_dir():
+            logger.error(f'vault path is not a directory: {vault_path}')
+            raise SystemExit(1)
 
-        # run the server
+        # initialize client singleton
+        _client = VaultClient(str(vault_path))
+
         mcp.run()
 
-    except ValueError as e:
-        logger.exception(f"configuration error: {e}")
-        print(f"Configuration error: {e}", file=sys.stderr)
-        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info('server shutdown requested')
 
     except Exception as e:
-        logger.exception(f"unexpected error: {e}")
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        sys.exit(1)
+        logger.error(f'server error: {e}')
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    run()
