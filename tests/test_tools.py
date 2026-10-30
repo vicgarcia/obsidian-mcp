@@ -195,3 +195,38 @@ class TestWikiTools:
         assert 'python-asyncio.md' in article_names
 
 
+
+
+class TestJournalEntryTools:
+    '''Test reading journal entries by date and appending to today's entry.'''
+
+    def test_read_journal_entry(self):
+        result = server.read_journal_entry('2025-01-15')
+        assert result['exists'] is True
+        assert 'January 15, 2025' in result['content']
+
+    def test_read_journal_entry_missing(self):
+        result = server.read_journal_entry('2025-01-16')
+        assert result['exists'] is False
+        assert result['content'] == ''
+
+    @pytest.mark.parametrize('bad', ['2025-1-15', '2025-02-30', 'yesterday', '', '../2025-01-15'])
+    def test_read_journal_entry_rejects_bad_dates(self, bad):
+        result = server.read_journal_entry(bad)
+        assert result['success'] is False
+        assert 'Invalid input' in result['error']
+
+    def test_append_to_todays_journal(self, vault_path):
+        result = server.append_to_todays_journal('  remember the milk  ')
+        assert result['success'] is True
+        assert result['created'] is True
+        assert (vault_path / result['path']).read_text() == 'remember the milk\n'
+
+        again = server.append_to_todays_journal('and eggs')
+        assert again['created'] is False
+        assert (vault_path / result['path']).read_text() == 'remember the milk\n\nand eggs\n'
+
+    def test_append_to_todays_journal_rejects_empty_text(self):
+        result = server.append_to_todays_journal('   ')
+        assert result['success'] is False
+        assert 'Invalid input' in result['error']

@@ -3,6 +3,7 @@ Pydantic validation models for Obsidian MCP input validation.
 '''
 
 import re
+from datetime import datetime
 from typing import Any, Dict
 
 from pydantic import BaseModel, field_validator
@@ -32,6 +33,35 @@ class YearMonthInput(BaseModel):
         if month_int < 1 or month_int > 12:
             raise ValueError('Month must be between 01 and 12')
         return v
+
+
+class JournalDateInput(BaseModel):
+    '''Input validation for a journal entry date.'''
+    date: str
+
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v: str) -> str:
+        v = v.strip()
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
+            raise ValueError('Date must be in YYYY-MM-DD format')
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError('Date is not a valid calendar date')
+        return v
+
+
+class JournalAppendInput(BaseModel):
+    '''Input validation for appending to a journal entry.'''
+    text: str
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        if not v or v.strip() == '':
+            raise ValueError('Text cannot be empty')
+        return v.strip()
 
 
 class FilePathInput(BaseModel):

@@ -242,3 +242,64 @@ class TestWikiOperations:
             assert len(articles) == 3
             article_names = [a['name'] for a in articles]
             assert 'python-asyncio.md' in article_names
+
+
+class TestJournalReadAndAppend:
+    '''Test reading journal entries by date and appending to them.'''
+
+    def test_read_existing_entry(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.read_journal_entry(datetime(2025, 1, 15))
+            assert result['path'] == 'journal/2025/01/2025-01-15.md'
+            assert result['exists'] is True
+            assert 'January 15, 2025' in result['content']
+
+    def test_read_missing_entry(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.read_journal_entry(datetime(2025, 1, 16))
+            assert result == {'path': 'journal/2025/01/2025-01-16.md', 'exists': False, 'content': ''}
+
+    def test_append_creates_entry(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.append_to_journal('first note', datetime(2025, 2, 3))
+            assert result == {'path': 'journal/2025/02/2025-02-03.md', 'created': True}
+            assert (vault_path / 'journal/2025/02/2025-02-03.md').read_bytes() == b'first note\n'
+
+    def test_append_adds_paragraph_and_keeps_existing_content(self, vault_path):
+        entry = vault_path / 'journal/2025/01/2025-01-15.md'
+        before = entry.read_bytes()
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.append_to_journal('saw a heron', datetime(2025, 1, 15))
+            assert result['created'] is False
+        after = entry.read_bytes()
+        # the seed file may be crlf on windows; the append must match whatever it uses
+        nl = b'\r\n' if b'\r\n' in before else b'\n'
+        assert after == before + nl + b'saw a heron' + nl
+
+    def test_append_twice_separates_with_one_blank_line(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            vault.append_to_journal('one', datetime(2025, 3, 1))
+            vault.append_to_journal('two', datetime(2025, 3, 1))
+        assert (vault_path / 'journal/2025/03/2025-03-01.md').read_bytes() == b'one\n\ntwo\n'
+
+    def test_append_to_file_without_trailing_newline(self, vault_path):
+        entry = vault_path / 'journal/2025/04/2025-04-01.md'
+        entry.parent.mkdir(parents=True)
+        entry.write_bytes(b'narrative')
+        with VaultClient(str(vault_path)) as vault:
+            vault.append_to_journal('note', datetime(2025, 4, 1))
+        assert entry.read_bytes() == b'narrative\n\nnote\n'
+
+    def test_append_preserves_crlf_line_endings(self, vault_path):
+        entry = vault_path / 'journal/2025/05/2025-05-01.md'
+        entry.parent.mkdir(parents=True)
+        entry.write_bytes(b'line one\r\nline two\r\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.append_to_journal('a\nb', datetime(2025, 5, 1))
+        assert entry.read_bytes() == b'line one\r\nline two\r\n\r\na\r\nb\r\n'
+
+    def test_append_defaults_to_today(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.append_to_journal('today note')
+            assert result['path'] == vault.get_journal_path()
+        assert (vault_path / result['path']).exists()

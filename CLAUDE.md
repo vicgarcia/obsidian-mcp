@@ -1,7 +1,7 @@
 # Claude Code Session Documentation
 
 ## Project Overview
-Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 10 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
+Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 12 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
 
 Installable via `uv tool install`.
 
@@ -11,7 +11,7 @@ obsidian-mcp/
 ├── src/
 │   └── obsidian_mcp/
 │       ├── __init__.py       # package init, version, exports
-│       ├── server.py         # FastMCP server + 10 tools
+│       ├── server.py         # FastMCP server + 12 tools
 │       ├── vault_client.py   # vault operations (context manager)
 │       └── schema.py         # Pydantic validation models
 ├── tests/
@@ -53,12 +53,13 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 - `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
 ## Tools Overview
-Ten core MCP tools (see README.md for full documentation):
+Twelve core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
 - `get_current_date` - Current date in multiple formats
 - `list_todays_journal_entry` - Get today's journal path
 - `start_daily_notes_session` - Interactive daily notes workflow
 - `list_journal_entries_by_year_and_month` - List entries for a month
+- `read_journal_entry` / `append_to_todays_journal` - Read an entry by date, append to today (append-only, never rewrites)
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
 
@@ -92,7 +93,7 @@ Ten core MCP tools (see README.md for full documentation):
 
 #### server.py (MCP Server)
 - FastMCP server initialization
-- 10 `@mcp.tool()` definitions
+- 12 `@mcp.tool()` definitions
 - Module-level client singleton
 - Entry point `run()` function
 
@@ -117,7 +118,7 @@ run()
 
 ### What We Built
 - **Modular architecture**: 3 core modules with clear responsibilities
-- **10 tools**: Covering three workflows (files/journal, projects, wiki)
+- **12 tools**: Covering three workflows (files/journal, projects, wiki)
 - **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`
 - **Dual deployment**: uv tool install + Docker
 - **Path validation**: Security-first file operations

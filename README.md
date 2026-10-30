@@ -83,7 +83,7 @@ replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
 ## tools
 
-this mcp server exposes 10 tools to interact with your obsidian vault.
+this mcp server exposes 12 tools to interact with your obsidian vault.
 
 #### read_file / write_file
 
@@ -128,6 +128,26 @@ list all journal entries for a specific month
 **example usage in claude:**
 > "show me my journal entries from january 2025"
 
+#### read_journal_entry
+
+read the journal entry for a date; returns `exists: false` and empty content when there is no entry
+
+**parameters:**
+- `date` (required): date in YYYY-MM-DD format
+
+**example usage in claude:**
+> "what did i write in my journal on october 3rd?"
+
+#### append_to_todays_journal
+
+append text to the end of today's journal entry as a new paragraph, creating the entry if needed. existing content is never rewritten, and the file keeps its line endings
+
+**parameters:**
+- `text` (required): text to append (markdown allowed)
+
+**example usage in claude:**
+> "add to my journal: the new trail by the river is great for running"
+
 #### list_projects / list_project_content / create_project
 
 manage project directories in your vault
@@ -169,7 +189,7 @@ uv run pytest
 obsidian-mcp/
 ├── src/obsidian_mcp/
 │   ├── __init__.py       # package init, version
-│   ├── server.py         # FastMCP server + 10 tools
+│   ├── server.py         # FastMCP server + 12 tools
 │   ├── vault_client.py   # vault operations (context manager)
 │   └── schema.py         # pydantic validation models
 ├── tests/

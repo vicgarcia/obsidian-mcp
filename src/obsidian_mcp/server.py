@@ -18,6 +18,8 @@ from pydantic import ValidationError
 from obsidian_mcp.schema import (
     FilePathInput,
     FileWriteInput,
+    JournalAppendInput,
+    JournalDateInput,
     ProjectInput,
     YearMonthInput,
     create_error_response,
@@ -329,6 +331,69 @@ def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[s
     except Exception as e:
         logger.exception(f'unexpected error listing journal entries: {e}')
         return [create_error_response(f'Unexpected error listing journal entries: {e}')]
+
+
+@mcp.tool()
+def read_journal_entry(date: str) -> Dict[str, Any]:
+    '''
+    Read the journal entry for a specific date.
+
+    Args:
+        date: Date in YYYY-MM-DD format (e.g., "2025-10-27")
+
+    Returns:
+        Dictionary with the entry path, whether it exists, and its content
+    '''
+    try:
+        logger.debug(f'read_journal_entry called: date={date}')
+        validated_input = JournalDateInput(date=date)
+        entry_date = datetime.strptime(validated_input.date, '%Y-%m-%d')
+
+        with get_client() as vault:
+            return vault.read_journal_entry(entry_date)
+
+    except ValidationError as e:
+        logger.error(f'validation error reading journal entry: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error reading journal entry: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error reading journal entry: {e}')
+        return create_error_response(f'Unexpected error reading journal entry: {e}')
+
+
+@mcp.tool()
+def append_to_todays_journal(text: str) -> Dict[str, Any]:
+    '''
+    Append text to the end of today's journal entry as a new paragraph.
+
+    Creates the entry if it does not exist yet. Existing content is never changed,
+    so this is the safe way to add a quick note or observation during the day.
+
+    Args:
+        text: Text to append (markdown allowed)
+
+    Returns:
+        Dictionary with success indicator, the entry path, and whether it was created
+    '''
+    try:
+        logger.debug(f'append_to_todays_journal called ({len(text)} chars)')
+        validated_input = JournalAppendInput(text=text)
+
+        with get_client() as vault:
+            result = vault.append_to_journal(validated_input.text)
+            return {**create_success_response(), **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error appending to journal: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error appending to journal: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error appending to journal: {e}')
+        return create_error_response(f'Unexpected error appending to journal: {e}')
 
 
 # project tools

@@ -306,6 +306,68 @@ class VaultClient:
         logger.info(f'found {len(entries)} journal entries for {year}/{month}')
         return sorted(entries, key=lambda x: x['name'])
 
+    def read_journal_entry(self, date: datetime) -> Dict[str, Any]:
+        '''
+        Read the journal entry for a date.
+
+        Args:
+            date: Date of the journal entry
+
+        Returns:
+            Dictionary with path, whether the entry exists, and its content (empty if missing)
+        '''
+        journal_path = self.get_journal_path(date)
+        if not self.file_exists(journal_path):
+            logger.info(f'no journal entry: {journal_path}')
+            return {'path': journal_path, 'exists': False, 'content': ''}
+        return {'path': journal_path, 'exists': True, 'content': self.read_file(journal_path)}
+
+    def append_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
+        '''
+        Append text as a new paragraph at the end of a journal entry, creating it if needed.
+
+        The file is opened in append mode, so existing content is never rewritten and
+        keeps its line endings.
+
+        Args:
+            text: Text to append
+            date: Date of the journal entry. Defaults to today.
+
+        Returns:
+            Dictionary with the entry path and whether the file was created
+
+        Raises:
+            VaultError: If the append fails
+        '''
+        journal_path = self.get_journal_path(date)
+        full_path = self._validate_path(journal_path)
+        created = not full_path.exists()
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            existing = b'' if created else full_path.read_bytes()
+            newline = '\r\n' if b'\r\n' in existing else '\n'
+
+            # separate the new paragraph from existing content with one blank line
+            if not existing.strip():
+                lead = ''
+            elif existing.endswith(newline.encode() * 2):
+                lead = ''
+            elif existing.endswith(b'\n'):
+                lead = newline
+            else:
+                lead = newline * 2
+
+            body = text.replace('\r\n', '\n').replace('\n', newline)
+            with open(full_path, 'a', encoding='utf-8', newline='') as f:
+                f.write(lead + body + newline)
+            logger.info(f'appended to journal: {journal_path} ({len(text)} chars, created={created})')
+        except OSError as e:
+            logger.error(f'failed to append to journal: {journal_path}: {e}')
+            raise VaultError(f'Failed to append to journal: {e}', journal_path)
+
+        return {'path': journal_path, 'created': created}
+
     # project operations
 
     def list_projects(self) -> List[Dict[str, str]]:
