@@ -261,11 +261,16 @@ class VaultClient:
             Journal path in format: journal/YYYY/MM/YYYY-MM-DD.md
         '''
         if date is None:
-            date = self._get_local_datetime()
+            date = self.get_local_datetime()
         return f'journal/{date.year}/{date.month:02d}/{date.year}-{date.month:02d}-{date.day:02d}.md'
 
-    def _get_local_datetime(self) -> datetime:
-        '''Get current datetime in local timezone.'''
+    def get_local_datetime(self) -> datetime:
+        '''
+        Get current datetime in local timezone.
+
+        datetime.now() can't be trusted when TZ is set: the Windows C runtime misreads
+        names like America/New_York and runs hours off, so TZ always goes through zoneinfo.
+        '''
         try:
             tz_name = os.getenv('TZ')
             if tz_name:
@@ -417,7 +422,85 @@ class VaultClient:
         self.create_directory(project_path)
         logger.info(f'created project: {project}')
 
+    def _validate_project_file_path(self, file_path: str) -> None:
+        '''
+        Check that a path is a file inside an existing project.
+
+        The check is on the resolved path, so links and traversal can't leave the project.
+
+        Args:
+            file_path: Vault-relative path to the file
+
+        Raises:
+            VaultError: If the path is not inside an existing project
+        '''
+        projects_dir = self._validate_path('projects')
+        full_path = self._validate_path(file_path)
+
+        if not full_path.is_relative_to(projects_dir):
+            logger.warning(f'project file path outside projects: {file_path}')
+            raise VaultError('Path is not inside a project', file_path)
+
+        parts = full_path.relative_to(projects_dir).parts
+        if len(parts) < 2:
+            raise VaultError('Path is not inside a project', file_path)
+
+        if not (projects_dir / parts[0]).is_dir():
+            raise VaultError('Project not found', parts[0])
+
+    def read_project_file(self, file_path: str) -> str:
+        '''
+        Read a file inside a project.
+
+        Args:
+            file_path: Vault-relative path, starting with projects/
+
+        Returns:
+            File content as string
+
+        Raises:
+            VaultError: If the path is not inside a project, or the file cannot be read
+        '''
+        self._validate_project_file_path(file_path)
+        return self.read_file(file_path)
+
+    def write_project_file(self, file_path: str, content: str) -> None:
+        '''
+        Write a file inside an existing project, replacing it if it exists.
+
+        Args:
+            file_path: Vault-relative path, starting with projects/
+            content: Content to write
+
+        Raises:
+            VaultError: If the path is not inside an existing project, or the write fails
+        '''
+        self._validate_project_file_path(file_path)
+        self.write_file(file_path, content)
+
     # wiki operations
+
+    def read_wiki_article(self, file_path: str) -> str:
+        '''
+        Read a wiki article.
+
+        Args:
+            file_path: Vault-relative path, starting with wiki/
+
+        Returns:
+            Article content as string
+
+        Raises:
+            VaultError: If the path is not inside the wiki, or the article cannot be read
+        '''
+        wiki_dir = self._validate_path('wiki')
+        full_path = self._validate_path(file_path)
+
+        if not full_path.is_relative_to(wiki_dir) or full_path == wiki_dir:
+            logger.warning(f'wiki article path outside wiki: {file_path}')
+            raise VaultError('Path is not inside the wiki', file_path)
+
+        return self.read_file(file_path)
 
     def list_wiki(self) -> List[Dict[str, str]]:
         '''

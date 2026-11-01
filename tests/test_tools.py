@@ -5,6 +5,7 @@ Tests for MCP tools.
 import pytest
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from obsidian_mcp.vault_client import VaultClient
 from obsidian_mcp import server
@@ -58,6 +59,16 @@ class TestFileTools:
 
 class TestDateTools:
     '''Test date tools.'''
+
+    @pytest.mark.parametrize('tz', ['Pacific/Kiritimati', 'Pacific/Pago_Pago'])
+    def test_tz_decides_today_for_every_date_tool(self, monkeypatch, tz):
+        '''These zones are 25 hours apart, so at least one differs from the system date.'''
+        monkeypatch.setenv('TZ', tz)
+        expected = datetime.now(ZoneInfo(tz))
+
+        assert server.get_current_date()['formatted'] == expected.strftime('%Y-%m-%d')
+        assert expected.strftime('%A %B %d, %Y') in server.start_daily_notes_session()
+        assert expected.strftime('%Y-%m-%d') in server.list_todays_journal_entry()['path']
 
     def test_get_current_date(self):
         '''Test getting current date.'''
@@ -194,7 +205,75 @@ class TestWikiTools:
         article_names = [a['name'] for a in result]
         assert 'python-asyncio.md' in article_names
 
+    def test_read_wiki_article(self, setup_wiki):
+        '''Test that a path from list_wiki can be read.'''
+        result = server.read_wiki_article('wiki/python-asyncio.md')
+        assert result['content']
 
+    @pytest.mark.parametrize('path', [
+        'journal/2025/01/2025-01-15.md',
+        'projects/scoped/plan.md',
+        'wiki',
+        'wiki/../journal/2025/01/2025-01-15.md',
+    ])
+    def test_read_wiki_article_refuses_paths_outside_the_wiki(self, setup_wiki, vault_path, path):
+        (vault_path / 'projects' / 'scoped').mkdir(parents=True, exist_ok=True)
+        (vault_path / 'projects' / 'scoped' / 'plan.md').write_text('private')
+
+        result = server.read_wiki_article(path)
+        assert result['success'] is False
+        assert 'content' not in result
+
+
+class TestProjectFileTools:
+    '''Test that project file tools stay inside a project.'''
+
+    @pytest.fixture
+    def project(self, vault_path):
+        project_dir = vault_path / 'projects' / 'scoped'
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / 'plan.md').write_text('shelves')
+        return project_dir
+
+    def test_read_project_file(self, project):
+        assert server.read_project_file('projects/scoped/plan.md') == {'content': 'shelves'}
+
+    def test_write_project_file_replaces_and_creates(self, project):
+        assert server.write_project_file('projects/scoped/plan.md', 'more shelves') == {'success': True}
+        assert (project / 'plan.md').read_text() == 'more shelves'
+        assert server.write_project_file('projects/scoped/notes/new.md', 'hello') == {'success': True}
+        assert (project / 'notes' / 'new.md').read_text() == 'hello'
+
+    @pytest.mark.parametrize('path', [
+        'journal/2025/01/2025-01-15.md',
+        'wiki/article.md',
+        'notes.md',
+        'projects/loose.md',
+        'projects',
+        'projects/scoped/../../journal/2025/01/2025-01-15.md',
+        '/etc/passwd',
+        'C:/Windows/system.ini',
+    ])
+    def test_paths_outside_a_project_are_refused(self, project, vault_path, path):
+        before = sorted(str(p) for p in vault_path.rglob('*'))
+        read = server.read_project_file(path)
+        written = server.write_project_file(path, 'overwritten')
+
+        assert read['success'] is False and 'content' not in read
+        assert written['success'] is False
+        assert sorted(str(p) for p in vault_path.rglob('*')) == before
+
+    def test_write_refuses_to_create_a_project(self, project, vault_path):
+        result = server.write_project_file('projects/typo/plan.md', 'hello')
+        assert result['success'] is False
+        assert 'Project not found' in result['error']
+        assert not (vault_path / 'projects' / 'typo').exists()
+
+    def test_write_does_not_change_a_journal_entry(self, project, vault_path):
+        entry = vault_path / 'journal' / '2025' / '01' / '2025-01-15.md'
+        before = entry.read_text()
+        server.write_project_file('journal/2025/01/2025-01-15.md', 'overwritten')
+        assert entry.read_text() == before
 
 
 class TestJournalEntryTools:

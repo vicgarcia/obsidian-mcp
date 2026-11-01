@@ -150,7 +150,8 @@ def get_current_date() -> Dict[str, str]:
     '''
     try:
         logger.debug('get_current_date called')
-        now = datetime.now()
+        with get_client() as vault:
+            now = vault.get_local_datetime()
         formatted_date = now.strftime('%Y-%m-%d')
         human_date = now.strftime('%A %B %d, %Y')
         logger.info(f'current date: {formatted_date} ({human_date})')
@@ -296,7 +297,8 @@ def start_daily_notes_session() -> str:
     Returns:
         Prompt instructions for the daily notes workflow
     '''
-    now = datetime.now()
+    with get_client() as vault:
+        now = vault.get_local_datetime()
     today = now.strftime('%A %B %d, %Y')
     return DAILY_NOTES_PROMPT.format(today=today)
 
@@ -481,6 +483,67 @@ def create_project(project: str) -> Dict[str, Any]:
         return create_error_response(f'Unexpected error creating project: {e}')
 
 
+@mcp.tool()
+def read_project_file(file_path: str) -> Dict[str, Any]:
+    '''
+    Read a file inside a project. Paths outside a project are refused.
+
+    Args:
+        file_path: Vault-relative path, as given by list_project_content
+
+    Returns:
+        Dictionary with file content or error message
+    '''
+    try:
+        logger.debug(f'read_project_file called with path: {file_path}')
+        validated_input = FilePathInput(file_path=file_path)
+
+        with get_client() as vault:
+            return {'content': vault.read_project_file(validated_input.file_path)}
+
+    except ValidationError as e:
+        logger.error(f'validation error reading project file: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error reading project file: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error reading project file: {e}')
+        return create_error_response(f'Unexpected error reading project file: {e}')
+
+
+@mcp.tool()
+def write_project_file(file_path: str, content: str) -> Dict[str, Any]:
+    '''
+    Write a file inside an existing project, replacing it if it exists.
+    Paths outside a project are refused, and create_project must have made the project first.
+
+    Args:
+        file_path: Vault-relative path, such as projects/home automation/plan.md
+        content: Complete content of the file
+
+    Returns:
+        Dictionary with success indicator or error message
+    '''
+    try:
+        logger.debug(f'write_project_file called with path: {file_path} ({len(content)} chars)')
+        validated_input = FileWriteInput(file_path=file_path, content=content)
+
+        with get_client() as vault:
+            vault.write_project_file(validated_input.file_path, validated_input.content)
+            return create_success_response()
+
+    except ValidationError as e:
+        logger.error(f'validation error writing project file: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error writing project file: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error writing project file: {e}')
+        return create_error_response(f'Unexpected error writing project file: {e}')
+
+
 # wiki tools
 
 @mcp.tool()
@@ -505,6 +568,35 @@ def list_wiki() -> List[Dict[str, str]]:
     except Exception as e:
         logger.exception(f'unexpected error listing wiki: {e}')
         return [create_error_response(f'Unexpected error listing wiki: {e}')]
+
+
+@mcp.tool()
+def read_wiki_article(file_path: str) -> Dict[str, Any]:
+    '''
+    Read a wiki article. Paths outside the wiki are refused.
+
+    Args:
+        file_path: Vault-relative path, as given by list_wiki
+
+    Returns:
+        Dictionary with article content or error message
+    '''
+    try:
+        logger.debug(f'read_wiki_article called with path: {file_path}')
+        validated_input = FilePathInput(file_path=file_path)
+
+        with get_client() as vault:
+            return {'content': vault.read_wiki_article(validated_input.file_path)}
+
+    except ValidationError as e:
+        logger.error(f'validation error reading wiki article: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error reading wiki article: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error reading wiki article: {e}')
+        return create_error_response(f'Unexpected error reading wiki article: {e}')
 
 
 # entry point

@@ -53,7 +53,7 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 - `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
 ## Tools Overview
-Twelve core MCP tools (see README.md for full documentation):
+Fifteen core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
 - `get_current_date` - Current date in multiple formats
 - `list_todays_journal_entry` - Get today's journal path
@@ -61,7 +61,8 @@ Twelve core MCP tools (see README.md for full documentation):
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `read_journal_entry` / `append_to_todays_journal` - Read an entry by date, append to today (append-only, never rewrites)
 - `list_projects` / `list_project_content` / `create_project` - Project management
-- `list_wiki` - List wiki articles
+- `read_project_file` / `write_project_file` - Read and write files, refusing paths outside an existing project
+- `list_wiki` / `read_wiki_article` - List and read wiki articles, refusing paths outside the wiki
 
 ## Implementation Notes
 
@@ -88,8 +89,8 @@ Twelve core MCP tools (see README.md for full documentation):
 - File operations: `read_file()`, `write_file()`, `file_exists()`
 - Directory operations: `list_files()`, `list_directories()`, `create_directory()`
 - Journal operations: `get_journal_path()`, `list_journal_entries()`
-- Project operations: `list_projects()`, `list_project_content()`, `create_project()`
-- Wiki operations: `list_wiki()`
+- Project operations: `list_projects()`, `list_project_content()`, `create_project()`, `read_project_file()`, `write_project_file()`
+- Wiki operations: `list_wiki()`, `read_wiki_article()`
 
 #### server.py (MCP Server)
 - FastMCP server initialization

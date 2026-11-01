@@ -160,12 +160,27 @@ manage project directories in your vault
 > "show me the files in my home automation project"
 > "create a new project called blog redesign"
 
-#### list_wiki
+#### read_project_file / write_project_file
 
-list all wiki articles in the wiki directory
+read or write a file inside a project. paths outside an existing project are refused, so these can't touch journal entries or the wiki. writing replaces the whole file
+
+**parameters:**
+- `file_path` (required): vault-relative path, such as `projects/home automation/plan.md`
+- `content` (required for write): complete content of the file
+
+**example usage in claude:**
+> "add a parts list to my home automation plan"
+
+#### list_wiki / read_wiki_article
+
+list the wiki articles in the wiki directory, or read one. paths outside the wiki are refused
+
+**parameters:**
+- `file_path` (required for read): vault-relative path, as given by `list_wiki`
 
 **example usage in claude:**
 > "list my wiki articles"
+> "read my wiki article on docker networking"
 
 ## development
 
