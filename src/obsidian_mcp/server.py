@@ -150,7 +150,8 @@ def get_current_date() -> Dict[str, str]:
     '''
     try:
         logger.debug('get_current_date called')
-        now = datetime.now()
+        with get_client() as vault:
+            now = vault.get_local_datetime()
         formatted_date = now.strftime('%Y-%m-%d')
         human_date = now.strftime('%A %B %d, %Y')
         logger.info(f'current date: {formatted_date} ({human_date})')
@@ -296,7 +297,8 @@ def start_daily_notes_session() -> str:
     Returns:
         Prompt instructions for the daily notes workflow
     '''
-    now = datetime.now()
+    with get_client() as vault:
+        now = vault.get_local_datetime()
     today = now.strftime('%A %B %d, %Y')
     return DAILY_NOTES_PROMPT.format(today=today)
 

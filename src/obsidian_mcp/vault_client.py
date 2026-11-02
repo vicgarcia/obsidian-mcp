@@ -261,11 +261,16 @@ class VaultClient:
             Journal path in format: journal/YYYY/MM/YYYY-MM-DD.md
         '''
         if date is None:
-            date = self._get_local_datetime()
+            date = self.get_local_datetime()
         return f'journal/{date.year}/{date.month:02d}/{date.year}-{date.month:02d}-{date.day:02d}.md'
 
-    def _get_local_datetime(self) -> datetime:
-        '''Get current datetime in local timezone.'''
+    def get_local_datetime(self) -> datetime:
+        '''
+        Get current datetime in local timezone.
+
+        datetime.now() can't be trusted when TZ is set: the Windows C runtime misreads
+        names like America/New_York and runs hours off, so TZ always goes through zoneinfo.
+        '''
         try:
             tz_name = os.getenv('TZ')
             if tz_name:
