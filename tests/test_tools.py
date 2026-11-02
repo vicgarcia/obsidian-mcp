@@ -5,6 +5,7 @@ Tests for MCP tools.
 import pytest
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from obsidian_mcp.vault_client import VaultClient
 from obsidian_mcp import server
@@ -58,6 +59,16 @@ class TestFileTools:
 
 class TestDateTools:
     '''Test date tools.'''
+
+    @pytest.mark.parametrize('tz', ['Pacific/Kiritimati', 'Pacific/Pago_Pago'])
+    def test_tz_decides_today_for_every_date_tool(self, monkeypatch, tz):
+        '''These zones are 25 hours apart, so at least one differs from the system date.'''
+        monkeypatch.setenv('TZ', tz)
+        expected = datetime.now(ZoneInfo(tz))
+
+        assert server.get_current_date()['formatted'] == expected.strftime('%Y-%m-%d')
+        assert expected.strftime('%A %B %d, %Y') in server.start_daily_notes_session()
+        assert expected.strftime('%Y-%m-%d') in server.list_todays_journal_entry()['path']
 
     def test_get_current_date(self):
         '''Test getting current date.'''
