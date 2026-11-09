@@ -8,7 +8,7 @@ file operations, journal management, project organization, and wiki articles.
 import argparse
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -166,28 +166,68 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 
 # date tools
 
+def format_timestamp(now: datetime) -> Dict[str, Any]:
+    '''Format a local datetime as every representation the timestamp tool returns.'''
+    offset = now.utcoffset()
+    if offset is None:
+        utc_offset = ''
+        utc = ''
+    else:
+        minutes = int(offset.total_seconds() // 60)
+        sign = '+' if minutes >= 0 else '-'
+        utc_offset = f'{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d}'
+        utc = now.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    time_12h = f'{now.hour % 12 or 12}:{now:%M %p}'
+    human_date = f'{now:%A %B} {now.day}, {now.year}'
+    iso_year, iso_week, _ = now.isocalendar()
+
+    return {
+        'iso': now.isoformat(timespec='seconds'),
+        'utc': utc,
+        'unix': int(now.timestamp()),
+        'date': now.strftime('%Y-%m-%d'),
+        'time': now.strftime('%H:%M:%S'),
+        'time_12h': time_12h,
+        'day_of_week': now.strftime('%A'),
+        'human_date': human_date,
+        'human': f'{human_date} at {time_12h}',
+        'iso_week': f'{iso_year}-W{iso_week:02d}',
+        'timezone': os.getenv('TZ') or now.tzname() or '',
+        'utc_offset': utc_offset,
+    }
+
+
 @mcp.tool()
-def get_current_date() -> Dict[str, str]:
+def get_current_timestamp() -> Dict[str, Any]:
     '''
-    Get the current date in both human-readable and YYYY-MM-DD formats.
+    Get the current local date and time (TZ timezone) in every common format.
 
     Returns:
-        Dictionary with date in YYYY-MM-DD format and human-readable format
+        Dictionary with:
+            iso: ISO 8601 local timestamp with offset (2026-11-08T14:32:05-05:00)
+            utc: ISO 8601 UTC timestamp (2026-11-08T19:32:05Z)
+            unix: seconds since the epoch
+            date: YYYY-MM-DD, the format journal tools take
+            time: 24-hour HH:MM:SS
+            time_12h: 12-hour time (2:32 PM)
+            day_of_week: weekday name
+            human_date: Sunday November 8, 2026
+            human: Sunday November 8, 2026 at 2:32 PM
+            iso_week: ISO week (2026-W45)
+            timezone: timezone name
+            utc_offset: offset from UTC (-05:00)
     '''
     try:
-        logger.debug('get_current_date called')
+        logger.debug('get_current_timestamp called')
         with get_client() as vault:
             now = vault.get_local_datetime()
-        formatted_date = now.strftime('%Y-%m-%d')
-        human_date = now.strftime('%A %B %d, %Y')
-        logger.info(f'current date: {formatted_date} ({human_date})')
-        return {
-            'formatted': formatted_date,
-            'human': human_date
-        }
+        result = format_timestamp(now)
+        logger.info(f"current timestamp: {result['iso']} ({result['timezone']})")
+        return result
     except Exception as e:
-        logger.exception(f'unexpected error getting current date: {e}')
-        return create_error_response(f'Unexpected error getting current date: {e}')
+        logger.exception(f'unexpected error getting current timestamp: {e}')
+        return create_error_response(f'Unexpected error getting current timestamp: {e}')
 
 
 # journal tools
