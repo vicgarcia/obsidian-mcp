@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# yaml frontmatter: a --- line at the very start, closed by the next --- (or ...) line
+_FRONTMATTER = re.compile(r'\A---[ \t]*\r?\n(?:.*?\r?\n)??(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)', re.DOTALL)
+
 
 class VaultError(Exception):
     '''Exception raised for vault operation errors.'''
@@ -371,6 +374,81 @@ class VaultClient:
             logger.error(f'failed to append to journal: {journal_path}: {e}')
             raise VaultError(f'Failed to append to journal: {e}', journal_path)
 
+        return {'path': journal_path, 'created': created}
+
+    def prepend_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
+        '''
+        Insert text as a new block at the top of a journal entry, creating it if needed.
+
+        YAML frontmatter (a --- block on the first line, shown by Obsidian as properties)
+        stays first and the text goes right after it. Existing content is otherwise kept
+        byte for byte, including its line endings.
+
+        Args:
+            text: Text to prepend
+            date: Date of the journal entry. Defaults to today.
+
+        Returns:
+            Dictionary with the entry path and whether the file was created
+
+        Raises:
+            VaultError: If the prepend fails
+        '''
+        journal_path = self.get_journal_path(date)
+        full_path = self._validate_path(journal_path)
+        created = not full_path.exists()
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            if created:
+                existing = ''
+            else:
+                with open(full_path, 'r', encoding='utf-8', newline='') as f:
+                    existing = f.read()
+            newline = '\r\n' if '\r\n' in existing else '\n'
+
+            match = _FRONTMATTER.match(existing)
+            frontmatter = match.group(0) if match else ''
+            rest = existing[len(frontmatter):]
+            if frontmatter and not frontmatter.endswith('\n'):
+                frontmatter += newline
+
+            # one blank line after frontmatter and between the new block and old content
+            body = text.replace('\r\n', '\n').replace('\n', newline)
+            parts = [frontmatter + newline] if frontmatter else []
+            parts.append(body + newline)
+            rest = rest.lstrip('\r\n')
+            if rest.strip():
+                parts.append(newline + rest)
+
+            with open(full_path, 'w', encoding='utf-8', newline='') as f:
+                f.write(''.join(parts))
+            logger.info(f'prepended to journal: {journal_path} ({len(text)} chars, created={created})')
+        except UnicodeDecodeError:
+            raise VaultError('Cannot read binary file', journal_path)
+        except OSError as e:
+            logger.error(f'failed to prepend to journal: {journal_path}: {e}')
+            raise VaultError(f'Failed to prepend to journal: {e}', journal_path)
+
+        return {'path': journal_path, 'created': created}
+
+    def write_journal_entry(self, content: str, date: Optional[datetime] = None) -> Dict[str, Any]:
+        '''
+        Replace the whole content of a journal entry, creating it if needed.
+
+        Args:
+            content: Full content of the entry
+            date: Date of the journal entry. Defaults to today.
+
+        Returns:
+            Dictionary with the entry path and whether the file was created
+
+        Raises:
+            VaultError: If the write fails
+        '''
+        journal_path = self.get_journal_path(date)
+        created = not self.file_exists(journal_path)
+        self.write_file(journal_path, content)
         return {'path': journal_path, 'created': created}
 
     # project operations

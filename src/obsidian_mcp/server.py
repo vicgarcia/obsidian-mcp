@@ -18,8 +18,9 @@ from pydantic import ValidationError
 from obsidian_mcp.schema import (
     FilePathInput,
     FileWriteInput,
-    JournalAppendInput,
     JournalDateInput,
+    JournalTextInput,
+    JournalWriteInput,
     ProjectInput,
     YearMonthInput,
     create_error_response,
@@ -69,9 +70,32 @@ def format_error(error: Exception) -> Dict[str, Any]:
     return create_error_response(str(error))
 
 
+# journal format guidance, shared by the server instructions and the daily notes prompt
+
+JOURNAL_FORMAT = '''
+journal files live at journal/YYYY/MM/YYYY-MM-DD.md, one file per day.
+
+a day's file holds one or more entries. each entry:
+- starts with a ### heading that names the entry (a short title, not the date)
+- uses #### headings for sections within the entry and ##### for subsections
+- never uses # or ## headings, and doesn't skip levels (no ##### directly under ###)
+- is written in first person, natural voice, valuable to read months later
+- keeps quick references (links, commands, snippets, todos) in a #### section inside the entry
+
+never add a date heading or title to the file, obsidian handles this.
+
+editing a journal file (date is YYYY-MM-DD, defaults to today):
+- append_to_journal_entry adds text at the end of the file. start it with a ### heading
+  to add a new entry; text without a heading continues the last entry.
+- prepend_to_journal_entry adds text at the top of the file (after any yaml frontmatter).
+  prepended text should always be a complete entry starting with a ### heading.
+- write_journal_entry replaces the whole file. read the entry first with read_journal_entry
+  and preserve existing entries; use this to edit or reorganize existing entries.
+'''
+
 # mcp server
 
-mcp = FastMCP('Obsidian MCP')
+mcp = FastMCP('Obsidian MCP', instructions=JOURNAL_FORMAT)
 
 
 # file tools
@@ -111,6 +135,8 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
     '''
     Write content to a file in the Obsidian vault.
     It's good practice to read from a file before writing to ensure nothing is overwritten.
+    For journal files, use write_journal_entry, append_to_journal_entry, or
+    prepend_to_journal_entry instead.
 
     Args:
         file_path: Vault-relative path to the file
@@ -171,15 +197,9 @@ def list_todays_journal_entry() -> Dict[str, Any]:
     '''
     Get today's journal entry path in the format journal/YYYY/MM/YYYY-MM-DD.md.
 
-    A journal entry file will generally consist of a narritive diary for the day
-    at the top, then a markdown horizontal rule of three dashes ---, then a section
-    for freeform notes and text snippets from the day.
-
-    When writing a daily journal entry, read the file first. When adding the entry
-    for the day, place the narration at the top of the file and seperate from existing
-    content with a horizontal rule if the file is not already formatted as such.
-
-    Do not include a header with the date in the file, Obsidian handles this.
+    A day's file holds one or more entries. Each entry starts with a ### heading and
+    uses #### and ##### headings to organize within it. Never add a date heading,
+    Obsidian handles this.
 
     Returns:
         Dictionary with today's journal entry path and name
@@ -240,41 +260,27 @@ good follow-up questions probe:
 when the user asks to update their journal
 (e.g. "update my journal", "write today's entry", "save notes"):
 
-use the session date from step 1.
+use the session date from step 1 (YYYY-MM-DD) for every journal tool call.
 
-check if entry exists:
-- use list_todays_journal_entry() to get today's path
-- if session date differs from today, construct path: journal/YYYY/MM/YYYY-MM-DD.md
-- use read_file() to check existing content
+read the file first with read_journal_entry(date).
 
-create or update the entry:
-
-format: narrative paragraphs, then --- separator, then freeform notes
-
-narrative section:
-- write 2-4 paragraphs in first person telling the story of the day
-- synthesize everything discussed into coherent narrative
+write the session as one entry:
+- a ### heading with a short title for the session
+- 2-4 first-person paragraphs telling the story, organized under #### sections
+  (and ##### subsections) when the session covered distinct topics
 - focus on what was accomplished, challenges faced, decisions made, insights gained
 - include specific technical details where relevant
-- make it valuable to read months later
 - natural personal voice, not a status report
+- a #### notes section for quick references, links, commands, snippets, ideas, todos
 
-separator: three dashes --- on their own line
+save it:
+- if the file is missing or has no entry for this session, add the new entry with
+  append_to_journal_entry(text, date), which leaves existing entries untouched
+- if you are extending an entry already written this session, read the file, merge into
+  that entry, and save the whole file with write_journal_entry(content, date),
+  preserving every other entry
 
-freeform notes section:
-- quick references, links, commands, snippets mentioned
-- ideas or todos that came up
-- anything worth preserving that doesn't fit narrative
-- use bullet points, code blocks, whatever makes sense
-
-if entry already exists:
-- read it first
-- preserve existing narrative, add to it rather than replace
-- merge or append to freeform notes
-- never include header with date, obsidian handles this
-
-use write_file() with the journal path to save.
-
+{journal_format}
 guidelines:
 
 - be conversational and engaged
@@ -300,7 +306,7 @@ def start_daily_notes_session() -> str:
     with get_client() as vault:
         now = vault.get_local_datetime()
     today = now.strftime('%A %B %d, %Y')
-    return DAILY_NOTES_PROMPT.format(today=today)
+    return DAILY_NOTES_PROMPT.format(today=today, journal_format=JOURNAL_FORMAT)
 
 
 @mcp.tool()
@@ -366,25 +372,63 @@ def read_journal_entry(date: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def append_to_todays_journal(text: str) -> Dict[str, Any]:
+def write_journal_entry(content: str, date: Optional[str] = None) -> Dict[str, Any]:
     '''
-    Append text to the end of today's journal entry as a new paragraph.
+    Replace the whole content of a journal entry file, creating it if needed.
 
-    Creates the entry if it does not exist yet. Existing content is never changed,
-    so this is the safe way to add a quick note or observation during the day.
+    Read the entry first with read_journal_entry and preserve existing entries. Use this
+    to edit or reorganize existing entries; to add a new entry, prefer
+    append_to_journal_entry or prepend_to_journal_entry, which never touch existing content.
+    Entries start with a ### heading and use #### and ##### headings within.
 
     Args:
-        text: Text to append (markdown allowed)
+        content: Full markdown content of the file
+        date: Date in YYYY-MM-DD format (defaults to today)
 
     Returns:
         Dictionary with success indicator, the entry path, and whether it was created
     '''
     try:
-        logger.debug(f'append_to_todays_journal called ({len(text)} chars)')
-        validated_input = JournalAppendInput(text=text)
+        logger.debug(f'write_journal_entry called: date={date} ({len(content)} chars)')
+        validated_input = JournalWriteInput(content=content, date=date)
 
         with get_client() as vault:
-            result = vault.append_to_journal(validated_input.text)
+            result = vault.write_journal_entry(validated_input.content, validated_input.entry_date())
+            return {**create_success_response(), **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error writing journal entry: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error writing journal entry: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error writing journal entry: {e}')
+        return create_error_response(f'Unexpected error writing journal entry: {e}')
+
+
+@mcp.tool()
+def append_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
+    '''
+    Append text to the end of a journal entry file, separated by a blank line.
+
+    Creates the file if it does not exist yet. Existing content is never changed.
+    Start the text with a ### heading to add a new entry (#### and ##### within it);
+    text without a heading continues the last entry.
+
+    Args:
+        text: Text to append (markdown allowed)
+        date: Date in YYYY-MM-DD format (defaults to today)
+
+    Returns:
+        Dictionary with success indicator, the entry path, and whether it was created
+    '''
+    try:
+        logger.debug(f'append_to_journal_entry called: date={date} ({len(text)} chars)')
+        validated_input = JournalTextInput(text=text, date=date)
+
+        with get_client() as vault:
+            result = vault.append_to_journal(validated_input.text, validated_input.entry_date())
             return {**create_success_response(), **result}
 
     except ValidationError as e:
@@ -396,6 +440,41 @@ def append_to_todays_journal(text: str) -> Dict[str, Any]:
     except Exception as e:
         logger.exception(f'unexpected error appending to journal: {e}')
         return create_error_response(f'Unexpected error appending to journal: {e}')
+
+
+@mcp.tool()
+def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
+    '''
+    Insert text at the top of a journal entry file, separated by a blank line.
+
+    Creates the file if it does not exist yet. YAML frontmatter stays first; all other
+    existing content is kept unchanged below the new text. The text should be a complete
+    entry starting with a ### heading (#### and ##### within it).
+
+    Args:
+        text: Text to prepend (markdown allowed)
+        date: Date in YYYY-MM-DD format (defaults to today)
+
+    Returns:
+        Dictionary with success indicator, the entry path, and whether it was created
+    '''
+    try:
+        logger.debug(f'prepend_to_journal_entry called: date={date} ({len(text)} chars)')
+        validated_input = JournalTextInput(text=text, date=date)
+
+        with get_client() as vault:
+            result = vault.prepend_to_journal(validated_input.text, validated_input.entry_date())
+            return {**create_success_response(), **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error prepending to journal: {e}')
+        return create_error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error prepending to journal: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error prepending to journal: {e}')
+        return create_error_response(f'Unexpected error prepending to journal: {e}')
 
 
 # project tools

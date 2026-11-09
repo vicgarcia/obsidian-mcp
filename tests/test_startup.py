@@ -29,7 +29,8 @@ def test_stdio_startup(vault_path):
                     'read_file', 'write_file', 'get_current_date',
                     'list_todays_journal_entry', 'start_daily_notes_session',
                     'list_journal_entries_by_year_and_month', 'read_journal_entry',
-                    'append_to_todays_journal', 'list_projects',
+                    'write_journal_entry', 'append_to_journal_entry',
+                    'prepend_to_journal_entry', 'list_projects',
                     'list_project_content', 'create_project', 'list_wiki',
                 }
                 result = await session.call_tool('get_current_date', {})
