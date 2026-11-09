@@ -96,12 +96,30 @@ read or write any file in the vault
 **example usage in claude:**
 > "read the architecture.md file in my home automation project"
 
-#### get_current_date
+#### get_current_timestamp
 
-get the current date in both YYYY-MM-DD and human-readable formats
+get the current local date and time (using `TZ`) in every common format:
+
+```json
+{
+  "iso": "2026-11-08T14:32:05-05:00",
+  "utc": "2026-11-08T19:32:05Z",
+  "unix": 1794166325,
+  "date": "2026-11-08",
+  "time": "14:32:05",
+  "time_12h": "2:32 PM",
+  "day_of_week": "Sunday",
+  "human_date": "Sunday November 8, 2026",
+  "human": "Sunday November 8, 2026 at 2:32 PM",
+  "iso_week": "2026-W45",
+  "timezone": "America/New_York",
+  "utc_offset": "-05:00"
+}
+```
 
 **example usage in claude:**
 > "what's today's date?"
+> "what time is it?"
 
 #### list_todays_journal_entry
 

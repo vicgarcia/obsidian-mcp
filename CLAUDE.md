@@ -55,7 +55,7 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 ## Tools Overview
 Fourteen core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
-- `get_current_date` - Current date in multiple formats
+- `get_current_timestamp` - Current local date and time in every common format (ISO, UTC, unix, date, 12/24h time, human, ISO week, timezone)
 - `list_todays_journal_entry` - Get today's journal path
 - `start_daily_notes_session` - Interactive daily notes workflow
 - `list_journal_entries_by_year_and_month` - List entries for a month

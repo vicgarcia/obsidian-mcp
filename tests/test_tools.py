@@ -66,23 +66,53 @@ class TestDateTools:
         monkeypatch.setenv('TZ', tz)
         expected = datetime.now(ZoneInfo(tz))
 
-        assert server.get_current_date()['formatted'] == expected.strftime('%Y-%m-%d')
+        result = server.get_current_timestamp()
+        assert result['date'] == expected.strftime('%Y-%m-%d')
+        assert result['timezone'] == tz
         assert expected.strftime('%A %B %d, %Y') in server.start_daily_notes_session()
         assert expected.strftime('%Y-%m-%d') in server.list_todays_journal_entry()['path']
 
-    def test_get_current_date(self):
-        '''Test getting current date.'''
-        result = server.get_current_date()
-        assert 'formatted' in result
-        assert 'human' in result
+    def test_get_current_timestamp(self, monkeypatch):
+        '''Test the current timestamp has every format and they agree.'''
+        monkeypatch.setenv('TZ', 'America/New_York')
+        result = server.get_current_timestamp()
+        assert set(result) == {
+            'iso', 'utc', 'unix', 'date', 'time', 'time_12h', 'day_of_week',
+            'human_date', 'human', 'iso_week', 'timezone', 'utc_offset',
+        }
+        local = datetime.fromisoformat(result['iso'])
+        assert local.strftime('%Y-%m-%d') == result['date']
+        assert local.strftime('%H:%M:%S') == result['time']
+        assert result['iso'].endswith(result['utc_offset'])
+        assert result['utc_offset'] in ('-05:00', '-04:00')
+        assert datetime.fromisoformat(result['utc']) == local
+        assert int(local.timestamp()) == result['unix']
+        assert result['timezone'] == 'America/New_York'
 
-        formatted = result['formatted']
-        assert len(formatted) == 10
-        assert formatted[4] == '-'
-        assert formatted[7] == '-'
+    def test_format_timestamp(self):
+        '''Test formatting a fixed moment.'''
+        now = datetime(2026, 11, 8, 14, 5, 9, tzinfo=ZoneInfo('America/New_York'))
+        assert server.format_timestamp(now) | {'timezone': None} == {
+            'iso': '2026-11-08T14:05:09-05:00',
+            'utc': '2026-11-08T19:05:09Z',
+            'unix': 1794164709,
+            'date': '2026-11-08',
+            'time': '14:05:09',
+            'time_12h': '2:05 PM',
+            'day_of_week': 'Sunday',
+            'human_date': 'Sunday November 8, 2026',
+            'human': 'Sunday November 8, 2026 at 2:05 PM',
+            'iso_week': '2026-W45',
+            'timezone': None,
+            'utc_offset': '-05:00',
+        }
 
-        expected_date = datetime.now().strftime('%Y-%m-%d')
-        assert formatted == expected_date
+    def test_format_timestamp_midnight_and_naive(self):
+        '''Midnight is 12 AM, and a naive datetime leaves the offset fields empty.'''
+        result = server.format_timestamp(datetime(2026, 1, 1, 0, 30))
+        assert result['time_12h'] == '12:30 AM'
+        assert result['utc_offset'] == ''
+        assert result['utc'] == ''
 
 
 class TestJournalTools:
