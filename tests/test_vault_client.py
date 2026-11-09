@@ -303,3 +303,74 @@ class TestJournalReadAndAppend:
             result = vault.append_to_journal('today note')
             assert result['path'] == vault.get_journal_path()
         assert (vault_path / result['path']).exists()
+
+
+class TestJournalPrependAndWrite:
+    '''Test prepending to journal entries and replacing them.'''
+
+    def _entry(self, vault_path, content: bytes):
+        entry = vault_path / 'journal/2025/06/2025-06-01.md'
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_bytes(content)
+        return entry
+
+    def test_prepend_creates_entry(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.prepend_to_journal('### First', datetime(2025, 2, 3))
+            assert result == {'path': 'journal/2025/02/2025-02-03.md', 'created': True}
+        assert (vault_path / 'journal/2025/02/2025-02-03.md').read_bytes() == b'### First\n'
+
+    def test_prepend_keeps_existing_content_below(self, vault_path):
+        entry = self._entry(vault_path, b'### Old\n\nold text\n')
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.prepend_to_journal('### New\n\nnew text', datetime(2025, 6, 1))
+            assert result['created'] is False
+        assert entry.read_bytes() == b'### New\n\nnew text\n\n### Old\n\nold text\n'
+
+    def test_prepend_collapses_leading_blank_lines(self, vault_path):
+        entry = self._entry(vault_path, b'\n\n### Old\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'### New\n\n### Old\n'
+
+    def test_prepend_goes_after_frontmatter(self, vault_path):
+        entry = self._entry(vault_path, b'---\ntags: [journal]\n---\n### Old\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'---\ntags: [journal]\n---\n\n### New\n\n### Old\n'
+
+    def test_prepend_after_frontmatter_only_file(self, vault_path):
+        entry = self._entry(vault_path, b'---\nmood: good\n---')
+        with VaultClient(str(vault_path)) as vault:
+            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'---\nmood: good\n---\n\n### New\n'
+
+    def test_prepend_treats_unclosed_rule_as_content(self, vault_path):
+        entry = self._entry(vault_path, b'---\n### Old\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'### New\n\n---\n### Old\n'
+
+    def test_prepend_preserves_crlf_line_endings(self, vault_path):
+        entry = self._entry(vault_path, b'---\r\na: 1\r\n---\r\n### Old\r\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.prepend_to_journal('### New\nline', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'---\r\na: 1\r\n---\r\n\r\n### New\r\nline\r\n\r\n### Old\r\n'
+
+    def test_prepend_defaults_to_today(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.prepend_to_journal('### Today')
+            assert result['path'] == vault.get_journal_path()
+
+    def test_write_journal_entry_replaces_content(self, vault_path):
+        entry = self._entry(vault_path, b'### Old\n')
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.write_journal_entry('### Replaced\n', datetime(2025, 6, 1))
+            assert result == {'path': 'journal/2025/06/2025-06-01.md', 'created': False}
+        assert entry.read_text() == '### Replaced\n'
+
+    def test_write_journal_entry_creates(self, vault_path):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.write_journal_entry('### New\n', datetime(2025, 7, 4))
+            assert result['created'] is True
+        assert (vault_path / 'journal/2025/07/2025-07-04.md').exists()

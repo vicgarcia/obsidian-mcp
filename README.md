@@ -83,7 +83,7 @@ replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
 ## tools
 
-this mcp server exposes 12 tools to interact with your obsidian vault.
+this mcp server exposes 14 tools to interact with your obsidian vault.
 
 #### read_file / write_file
 
@@ -138,15 +138,44 @@ read the journal entry for a date; returns `exists: false` and empty content whe
 **example usage in claude:**
 > "what did i write in my journal on october 3rd?"
 
-#### append_to_todays_journal
+#### journal entry format
 
-append text to the end of today's journal entry as a new paragraph, creating the entry if needed. existing content is never rewritten, and the file keeps its line endings
+a day's file holds one or more entries. each entry starts with a `###` heading naming it, and uses `####` and `#####` headings to organize within it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions and repeated in the journal tool descriptions
+
+```markdown
+### Morning run and MCP refactor
+
+first-person narrative...
+
+#### Work
+
+##### obsidian-mcp
+...
+
+#### Notes
+- links, commands, snippets, todos
+
+### Evening reading
+...
+```
+
+#### write_journal_entry / append_to_journal_entry / prepend_to_journal_entry
+
+three ways to edit a journal file, each creating the file if needed:
+
+- **write_journal_entry**: replace the whole file (read it first, used for editing or reorganizing existing entries)
+- **append_to_journal_entry**: add text to the end, separated by a blank line. existing content is never rewritten
+- **prepend_to_journal_entry**: add text to the top, after any yaml frontmatter. the rest of the file is kept unchanged
+
+append and prepend keep the file's line endings (lf or crlf)
 
 **parameters:**
-- `text` (required): text to append (markdown allowed)
+- `content` / `text` (required): markdown to write, append, or prepend
+- `date` (optional): date in YYYY-MM-DD format, defaults to today
 
 **example usage in claude:**
 > "add to my journal: the new trail by the river is great for running"
+> "add an entry to the top of yesterday's journal about the dentist visit"
 
 #### list_projects / list_project_content / create_project
 
@@ -189,7 +218,7 @@ uv run pytest
 obsidian-mcp/
 ├── src/obsidian_mcp/
 │   ├── __init__.py       # package init, version
-│   ├── server.py         # FastMCP server + 12 tools
+│   ├── server.py         # FastMCP server + 14 tools
 │   ├── vault_client.py   # vault operations (context manager)
 │   └── schema.py         # pydantic validation models
 ├── tests/

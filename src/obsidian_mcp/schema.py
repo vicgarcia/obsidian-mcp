@@ -4,7 +4,7 @@ Pydantic validation models for Obsidian MCP input validation.
 
 import re
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -35,6 +35,18 @@ class YearMonthInput(BaseModel):
         return v
 
 
+def _validate_journal_date(v: str) -> str:
+    '''Validate a YYYY-MM-DD journal date string.'''
+    v = v.strip()
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
+        raise ValueError('Date must be in YYYY-MM-DD format')
+    try:
+        datetime.strptime(v, '%Y-%m-%d')
+    except ValueError:
+        raise ValueError('Date is not a valid calendar date')
+    return v
+
+
 class JournalDateInput(BaseModel):
     '''Input validation for a journal entry date.'''
     date: str
@@ -42,19 +54,13 @@ class JournalDateInput(BaseModel):
     @field_validator('date')
     @classmethod
     def validate_date(cls, v: str) -> str:
-        v = v.strip()
-        if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
-            raise ValueError('Date must be in YYYY-MM-DD format')
-        try:
-            datetime.strptime(v, '%Y-%m-%d')
-        except ValueError:
-            raise ValueError('Date is not a valid calendar date')
-        return v
+        return _validate_journal_date(v)
 
 
-class JournalAppendInput(BaseModel):
-    '''Input validation for appending to a journal entry.'''
+class JournalTextInput(BaseModel):
+    '''Input validation for appending or prepending to a journal entry (date defaults to today).'''
     text: str
+    date: Optional[str] = None
 
     @field_validator('text')
     @classmethod
@@ -62,6 +68,37 @@ class JournalAppendInput(BaseModel):
         if not v or v.strip() == '':
             raise ValueError('Text cannot be empty')
         return v.strip()
+
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else _validate_journal_date(v)
+
+    def entry_date(self) -> Optional[datetime]:
+        '''The parsed entry date, or None for today.'''
+        return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
+
+
+class JournalWriteInput(BaseModel):
+    '''Input validation for writing a whole journal entry (date defaults to today).'''
+    content: str
+    date: Optional[str] = None
+
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        if not v or v.strip() == '':
+            raise ValueError('Content cannot be empty')
+        return v
+
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else _validate_journal_date(v)
+
+    def entry_date(self) -> Optional[datetime]:
+        '''The parsed entry date, or None for today.'''
+        return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
 
 
 class FilePathInput(BaseModel):

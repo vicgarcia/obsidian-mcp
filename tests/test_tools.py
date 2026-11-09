@@ -227,17 +227,66 @@ class TestJournalEntryTools:
         assert result['success'] is False
         assert 'Invalid input' in result['error']
 
-    def test_append_to_todays_journal(self, vault_path):
-        result = server.append_to_todays_journal('  remember the milk  ')
+    def test_append_to_journal_entry_today(self, vault_path):
+        result = server.append_to_journal_entry('  remember the milk  ')
         assert result['success'] is True
         assert result['created'] is True
+        assert result['path'] == server.list_todays_journal_entry()['path']
         assert (vault_path / result['path']).read_text() == 'remember the milk\n'
 
-        again = server.append_to_todays_journal('and eggs')
+        again = server.append_to_journal_entry('and eggs')
         assert again['created'] is False
         assert (vault_path / result['path']).read_text() == 'remember the milk\n\nand eggs\n'
 
-    def test_append_to_todays_journal_rejects_empty_text(self):
-        result = server.append_to_todays_journal('   ')
+    def test_append_to_journal_entry_by_date(self, vault_path):
+        result = server.append_to_journal_entry('### Late night\n\nwrapped up', date='2025-01-15')
+        assert result['path'] == 'journal/2025/01/2025-01-15.md'
+        assert result['created'] is False
+        assert (vault_path / result['path']).read_text().endswith(
+            '#journal #2025 #january\n\n### Late night\n\nwrapped up\n'
+        )
+
+    def test_prepend_to_journal_entry_today(self, vault_path):
+        result = server.prepend_to_journal_entry('### Evening\n\nread a book')
+        assert result['success'] is True
+        assert result['created'] is True
+        path = vault_path / result['path']
+        assert path.read_text() == '### Evening\n\nread a book\n'
+
+        again = server.prepend_to_journal_entry('### Night\n\nwent to bed')
+        assert again['created'] is False
+        assert path.read_text() == '### Night\n\nwent to bed\n\n### Evening\n\nread a book\n'
+
+    def test_prepend_to_journal_entry_by_date(self, vault_path):
+        result = server.prepend_to_journal_entry('### Morning\n\ncoffee', date='2025-01-15')
+        content = (vault_path / result['path']).read_text()
+        assert content.startswith('### Morning\n\ncoffee\n\n# January 15, 2025')
+
+    def test_write_journal_entry(self, vault_path):
+        result = server.write_journal_entry('### Rewritten\n\nall new\n', date='2025-01-15')
+        assert result['success'] is True
+        assert result['created'] is False
+        assert (vault_path / result['path']).read_text() == '### Rewritten\n\nall new\n'
+
+        today = server.write_journal_entry('### Today\n')
+        assert today['created'] is True
+        assert today['path'] == server.list_todays_journal_entry()['path']
+
+    @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry', 'write_journal_entry'])
+    def test_journal_edit_tools_reject_empty_text(self, tool):
+        result = getattr(server, tool)('   ')
         assert result['success'] is False
         assert 'Invalid input' in result['error']
+
+    @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry', 'write_journal_entry'])
+    @pytest.mark.parametrize('bad', ['2025-1-15', '2025-02-30', 'yesterday', '../2025-01-15'])
+    def test_journal_edit_tools_reject_bad_dates(self, tool, bad, vault_path):
+        result = getattr(server, tool)('### Entry', date=bad)
+        assert result['success'] is False
+        assert 'Invalid input' in result['error']
+
+    def test_daily_notes_prompt_describes_entry_headings(self):
+        prompt = server.start_daily_notes_session()
+        assert '### heading' in prompt
+        assert 'append_to_journal_entry' in prompt
+        assert 'write_file' not in prompt
