@@ -2,7 +2,6 @@ This MCP server gives Claude Desktop access to an [Obsidian](https://obsidian.md
 
 Once set up, you can make queries like:
 
-- "start a daily notes session"
 - "what did I work on last week?"
 - "list my projects"
 - "read the docker networking wiki article"
@@ -83,7 +82,7 @@ replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
 ## tools
 
-this mcp server exposes 14 tools to interact with your obsidian vault.
+this mcp server exposes 13 tools to interact with your obsidian vault.
 
 #### read_file / write_file
 
@@ -128,13 +127,6 @@ get the path for today's journal entry (e.g., `journal/2025/01/2025-01-15.md`)
 **example usage in claude:**
 > "what's my journal path for today?"
 
-#### start_daily_notes_session
-
-start an interactive daily notes workflow that announces the date, collects notes throughout the day with follow-up questions, and generates a narrative journal entry
-
-**example usage in claude:**
-> "start a daily notes session"
-
 #### list_journal_entries_by_year_and_month
 
 list all journal entries for a specific month
@@ -159,6 +151,8 @@ read the journal entry for a date; returns `exists: false` and empty content whe
 #### journal entry format
 
 a day's file holds one or more entries. each entry starts with a `###` heading naming it, and uses `####` and `#####` headings to organize within it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions and repeated in the journal tool descriptions
+
+before touching a journal entry, claude is told to call `get_current_timestamp` instead of guessing the date, to confirm the date when you are writing after midnight or catching up on an earlier day, and to use the time of day for ordering without writing timestamps into entries
 
 ```markdown
 ### Morning run and MCP refactor
@@ -236,7 +230,7 @@ uv run pytest
 obsidian-mcp/
 ├── src/obsidian_mcp/
 │   ├── __init__.py       # package init, version
-│   ├── server.py         # FastMCP server + 14 tools
+│   ├── server.py         # FastMCP server + 13 tools
 │   ├── vault_client.py   # vault operations (context manager)
 │   └── schema.py         # pydantic validation models
 ├── tests/

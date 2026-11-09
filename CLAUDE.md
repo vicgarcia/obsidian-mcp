@@ -1,7 +1,7 @@
 # Claude Code Session Documentation
 
 ## Project Overview
-Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 14 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
+Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 13 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
 
 Installable via `uv tool install`.
 
@@ -11,7 +11,7 @@ obsidian-mcp/
 ├── src/
 │   └── obsidian_mcp/
 │       ├── __init__.py       # package init, version, exports
-│       ├── server.py         # FastMCP server + 14 tools
+│       ├── server.py         # FastMCP server + 13 tools
 │       ├── vault_client.py   # vault operations (context manager)
 │       └── schema.py         # Pydantic validation models
 ├── tests/
@@ -53,16 +53,15 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 - `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
 ## Tools Overview
-Fourteen core MCP tools (see README.md for full documentation):
+Thirteen core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
 - `get_current_timestamp` - Current local date and time in every common format (ISO, UTC, unix, date, 12/24h time, human, ISO week, timezone)
 - `list_todays_journal_entry` - Get today's journal path
-- `start_daily_notes_session` - Interactive daily notes workflow
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `read_journal_entry` - Read an entry by date
 - `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry (optional `date`, defaults to today; prepend goes after YAML frontmatter)
 
-Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions` and embedded in the daily notes prompt: each entry starts with a `###` heading and uses `####` / `#####` within it.
+Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: each entry starts with a `###` heading and uses `####` / `#####` within it.
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
 
@@ -97,7 +96,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 
 #### server.py (MCP Server)
 - FastMCP server initialization
-- 14 `@mcp.tool()` definitions
+- 13 `@mcp.tool()` definitions
 - Module-level client singleton
 - Entry point `run()` function
 
@@ -122,7 +121,7 @@ run()
 
 ### What We Built
 - **Modular architecture**: 3 core modules with clear responsibilities
-- **14 tools**: Covering three workflows (files/journal, projects, wiki)
+- **13 tools**: Covering three workflows (files/journal, projects, wiki)
 - **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`
 - **Dual deployment**: uv tool install + Docker
 - **Path validation**: Security-first file operations
