@@ -84,6 +84,14 @@ a day's file holds one or more entries. each entry:
 
 never add a date heading or title to the file, obsidian handles this.
 
+dates and time:
+- before reading or writing a journal entry, call get_current_timestamp; don't rely on
+  your own sense of today's date. "today" means the date in the user's timezone (TZ).
+- if the user is writing after midnight about the previous day, or catching up on an
+  earlier day, confirm the date with them and pass it explicitly as date (YYYY-MM-DD).
+- use the time of day to order entries and to describe when things happened, but don't
+  write timestamps into the entry text.
+
 editing a journal file (date is YYYY-MM-DD, defaults to today):
 - append_to_journal_entry adds text at the end of the file. start it with a ### heading
   to add a new entry; text without a heading continues the last entry.
@@ -202,6 +210,10 @@ def format_timestamp(now: datetime) -> Dict[str, Any]:
 def get_current_timestamp() -> Dict[str, Any]:
     '''
     Get the current local date and time (TZ timezone) in every common format.
+
+    This is the source of truth for "today" and "now". Call it before reading or writing
+    a journal entry instead of relying on your own sense of the date; pass its date field
+    to the journal tools.
 
     Returns:
         Dictionary with:

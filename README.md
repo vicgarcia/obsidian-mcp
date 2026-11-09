@@ -152,6 +152,8 @@ read the journal entry for a date; returns `exists: false` and empty content whe
 
 a day's file holds one or more entries. each entry starts with a `###` heading naming it, and uses `####` and `#####` headings to organize within it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions and repeated in the journal tool descriptions
 
+before touching a journal entry, claude is told to call `get_current_timestamp` instead of guessing the date, to confirm the date when you are writing after midnight or catching up on an earlier day, and to use the time of day for ordering without writing timestamps into entries
+
 ```markdown
 ### Morning run and MCP refactor
 

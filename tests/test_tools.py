@@ -312,5 +312,6 @@ class TestJournalEntryTools:
         instructions = server.mcp.instructions
         assert instructions == server.JOURNAL_FORMAT
         assert '### heading' in instructions
-        for tool in ('write_journal_entry', 'append_to_journal_entry', 'prepend_to_journal_entry'):
+        for tool in ('write_journal_entry', 'append_to_journal_entry', 'prepend_to_journal_entry',
+                     'get_current_timestamp'):
             assert tool in instructions
