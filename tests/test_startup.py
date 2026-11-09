@@ -27,7 +27,7 @@ def test_stdio_startup(vault_path):
                 tools = await session.list_tools()
                 assert {tool.name for tool in tools.tools} == {
                     'read_file', 'write_file', 'get_current_timestamp',
-                    'list_todays_journal_entry', 'start_daily_notes_session',
+                    'list_todays_journal_entry',
                     'list_journal_entries_by_year_and_month', 'read_journal_entry',
                     'write_journal_entry', 'append_to_journal_entry',
                     'prepend_to_journal_entry', 'list_projects',

@@ -70,7 +70,7 @@ def format_error(error: Exception) -> Dict[str, Any]:
     return create_error_response(str(error))
 
 
-# journal format guidance, shared by the server instructions and the daily notes prompt
+# journal format guidance, sent to clients as the server instructions
 
 JOURNAL_FORMAT = '''
 journal files live at journal/YYYY/MM/YYYY-MM-DD.md, one file per day.
@@ -259,94 +259,6 @@ def list_todays_journal_entry() -> Dict[str, Any]:
     except Exception as e:
         logger.exception(f'unexpected error getting today\'s journal entry: {e}')
         return create_error_response(f'Unexpected error getting today\'s journal entry: {e}')
-
-
-DAILY_NOTES_PROMPT = '''
-you are assisting with a daily notes session, your role:
-
-help capture the user's day through interactive note-taking.
-be engaged and curious.
-help them think deeper about their work.
-
-session flow:
-
-1. announce the date
-
-announce that today is {today}.
-ask if this is the correct date for this session.
-assume that no response is confirmation of the date.
-if they're catching up on a previous day or started after midnight, they should tell you the correct date.
-remember this date for creating the journal entry later.
-
-2. collect notes throughout the day
-
-as the user shares updates:
-- acknowledge what they shared
-- ask 2-3 follow-up questions to help them elaborate
-- focus on context, challenges, decisions, outcomes
-- keep questions natural and conversational
-- don't force responses, move on when they share next update
-- accumulate context from everything shared
-
-good follow-up questions probe:
-- why they chose a particular approach
-- what challenges or blockers they hit
-- what they learned or would do differently
-- how it connects to larger goals
-- technical details worth remembering
-
-3. generate the journal entry
-
-when the user asks to update their journal
-(e.g. "update my journal", "write today's entry", "save notes"):
-
-use the session date from step 1 (YYYY-MM-DD) for every journal tool call.
-
-read the file first with read_journal_entry(date).
-
-write the session as one entry:
-- a ### heading with a short title for the session
-- 2-4 first-person paragraphs telling the story, organized under #### sections
-  (and ##### subsections) when the session covered distinct topics
-- focus on what was accomplished, challenges faced, decisions made, insights gained
-- include specific technical details where relevant
-- natural personal voice, not a status report
-- a #### notes section for quick references, links, commands, snippets, ideas, todos
-
-save it:
-- if the file is missing or has no entry for this session, add the new entry with
-  append_to_journal_entry(text, date), which leaves existing entries untouched
-- if you are extending an entry already written this session, read the file, merge into
-  that entry, and save the whole file with write_journal_entry(content, date),
-  preserving every other entry
-
-{journal_format}
-guidelines:
-
-- be conversational and engaged
-- remember everything for the final journal entry
-- questions are optional prompts for deeper thinking
-- synthesize everything into cohesive story
-- make entries valuable months later
-- focus on why and how, not just what
-'''
-
-
-@mcp.tool()
-def start_daily_notes_session() -> str:
-    '''
-    Start a daily notes session to track the day's activities and progress.
-
-    Initiates an interactive workflow that announces the date, collects notes with
-    follow-up questions, and generates journal entries.
-
-    Returns:
-        Prompt instructions for the daily notes workflow
-    '''
-    with get_client() as vault:
-        now = vault.get_local_datetime()
-    today = now.strftime('%A %B %d, %Y')
-    return DAILY_NOTES_PROMPT.format(today=today, journal_format=JOURNAL_FORMAT)
 
 
 @mcp.tool()

@@ -69,7 +69,6 @@ class TestDateTools:
         result = server.get_current_timestamp()
         assert result['date'] == expected.strftime('%Y-%m-%d')
         assert result['timezone'] == tz
-        assert expected.strftime('%A %B %d, %Y') in server.start_daily_notes_session()
         assert expected.strftime('%Y-%m-%d') in server.list_todays_journal_entry()['path']
 
     def test_get_current_timestamp(self, monkeypatch):
@@ -126,12 +125,6 @@ class TestJournalTools:
         assert result['path'].startswith('journal/')
         assert result['path'].endswith('.md')
 
-    def test_start_daily_notes_session(self):
-        '''Test starting daily notes session.'''
-        result = server.start_daily_notes_session()
-        assert isinstance(result, str)
-        assert 'daily notes session' in result
-        assert 'journal entry' in result
 
     def test_list_journal_entries_by_year_and_month(self, vault_path):
         '''Test listing journal entries.'''
@@ -315,8 +308,9 @@ class TestJournalEntryTools:
         assert result['success'] is False
         assert 'Invalid input' in result['error']
 
-    def test_daily_notes_prompt_describes_entry_headings(self):
-        prompt = server.start_daily_notes_session()
-        assert '### heading' in prompt
-        assert 'append_to_journal_entry' in prompt
-        assert 'write_file' not in prompt
+    def test_server_instructions_describe_entry_headings(self):
+        instructions = server.mcp.instructions
+        assert instructions == server.JOURNAL_FORMAT
+        assert '### heading' in instructions
+        for tool in ('write_journal_entry', 'append_to_journal_entry', 'prepend_to_journal_entry'):
+            assert tool in instructions
