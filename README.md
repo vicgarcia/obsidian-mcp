@@ -94,7 +94,7 @@ paths are relative to the vault root and can't leave it, with the same rules on 
 - `file_path` (required): vault-relative path to the file
 - `content` (required for write): content to write
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "read the architecture.md file in my home automation project"
 
 #### get_todays_date
@@ -112,7 +112,7 @@ get today's date and the current time in your timezone (`TZ`):
 
 `date` is the format the journal tools take. claude is told to call this before touching the journal instead of guessing the date, and to check the time: after midnight you may still mean the previous day
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "what's today's date?"
 
 #### list_journal_entries_by_year_and_month
@@ -123,7 +123,7 @@ list all journal entries for a specific month
 - `year` (required): year in YYYY format
 - `month` (required): month in MM format (e.g., "01", "10")
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "show me my journal entries from january 2025"
 
 #### read_journal_entry
@@ -133,7 +133,7 @@ read the journal entry for a date; returns its `path`, `exists: false` and empty
 **parameters:**
 - `date` (required): date in YYYY-MM-DD format
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "what did i write in my journal on october 3rd?"
 
 #### journal format
@@ -174,7 +174,7 @@ add a note to the `# Daily Notes` section, the usual way to write to the journal
 - `text` (required): the note, starting with a `###` heading
 - `date` (optional): date in YYYY-MM-DD format, defaults to today
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "add a note: the new trail by the river is great for running"
 > "it's 1am but i haven't slept, add a note to today about the deploy" (claude confirms and passes yesterday's date)
 
@@ -190,7 +190,7 @@ lower-level ways to edit a journal file, each creating the file if needed:
 - `content` / `text` (required): markdown to write, append, or prepend
 - `date` (optional): date in YYYY-MM-DD format, defaults to today
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "add a daily recap to the top of today's journal"
 
 #### list_projects / list_project_content / create_project
@@ -200,7 +200,7 @@ manage project directories in your vault
 **parameters:**
 - `project` (required): name of the project directory
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "list my projects"
 > "show me the files in my home automation project"
 > "create a new project called blog redesign"
@@ -209,7 +209,7 @@ manage project directories in your vault
 
 list all wiki articles in the wiki directory
 
-**example usage in claude:**
+<sub>example usage in claude:</sub>
 > "list my wiki articles"
 
 ## development
