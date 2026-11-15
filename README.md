@@ -88,6 +88,8 @@ this mcp server exposes 13 tools to interact with your obsidian vault.
 
 read or write any file in the vault
 
+paths are relative to the vault root and can't leave it, with the same rules on macos and windows: no absolute, drive or network paths, no `..`, and no names windows can't hold (`:` `?` `*` and the like, reserved names such as `nul.md`, a trailing dot or space). `\` works as a separator. links that point out of the vault are refused. errors never show where the vault is on disk
+
 **parameters:**
 - `file_path` (required): vault-relative path to the file
 - `content` (required for write): content to write

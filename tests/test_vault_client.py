@@ -57,7 +57,7 @@ class TestFileOperations:
     def test_read_path_traversal(self, vault_path):
         '''Test that path traversal is blocked.'''
         with VaultClient(str(vault_path)) as vault:
-            with pytest.raises(VaultError, match='outside vault'):
+            with pytest.raises(VaultError, match='Invalid path.*traversal'):
                 vault.read_file('../../../etc/passwd')
 
     def test_write_new_file(self, vault_path):

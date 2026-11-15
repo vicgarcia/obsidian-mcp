@@ -11,6 +11,7 @@ from obsidian_mcp.schema import (
     FileWriteInput,
     ProjectInput,
     create_error_response,
+    validate_vault_path,
     create_success_response,
 )
 
@@ -155,3 +156,92 @@ class TestResponseHelpers:
         '''Test creating success responses.'''
         success = create_success_response()
         assert success == {'success': True}
+
+
+class TestVaultPath:
+    '''Vault-relative path rules, checked on the text and the same on every platform.'''
+
+    @pytest.mark.parametrize('path, expected', [
+        ('journal/2025/01/2025-01-15.md', 'journal/2025/01/2025-01-15.md'),
+        ('projects/home automation/plan.md', 'projects/home automation/plan.md'),
+        ('projects\\garage\\plan.md', 'projects/garage/plan.md'),
+        ('  wiki/docker networking.md  ', 'wiki/docker networking.md'),
+        ('projects/p/notes..md', 'projects/p/notes..md'),
+        ('projects/p/.obsidian-ish', 'projects/p/.obsidian-ish'),
+        ('projects/p/console.md', 'projects/p/console.md'),
+        ('projects/p/nullable.md', 'projects/p/nullable.md'),
+        ('projects/p/com10.md', 'projects/p/com10.md'),
+        ('projects/p/café ünïcode.md', 'projects/p/café ünïcode.md'),
+    ])
+    def test_accepts_portable_relative_paths(self, path, expected):
+        assert validate_vault_path(path) == expected
+
+    @pytest.mark.parametrize('path', [
+        '../outside.md',
+        'projects/../../outside.md',
+        '..\\outside.md',
+        'projects\\..\\..\\outside.md',
+        'projects/p/..',
+    ])
+    def test_rejects_dotdot(self, path):
+        with pytest.raises(ValueError, match='directory traversal'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('path', [
+        '/etc/passwd',
+        '\\Windows\\system.ini',
+        '\\\\server\\share\\x.md',
+        '//server/share/x.md',
+        '\\\\?\\C:\\x.md',
+    ])
+    def test_rejects_absolute_rooted_and_unc(self, path):
+        with pytest.raises(ValueError, match='absolute or rooted'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('path', [
+        'C:\\Windows\\system.ini',
+        'C:/Windows/system.ini',
+        'C:Users\\x.md',
+        'D:secret.md',
+        'journal/x.md:hidden',
+        'journal/x.md::$DATA',
+        'projects/a?b.md',
+        'projects/a*.md',
+        'projects/a<b>.md',
+        'projects/a|b.md',
+        'projects/"quoted".md',
+        'projects/a\x00.md',
+        'projects/a\nb.md',
+    ])
+    def test_rejects_drives_streams_and_bad_characters(self, path):
+        with pytest.raises(ValueError, match='cannot contain'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('path', [
+        'projects/CON', 'projects/con.md', 'projects/NUL.md', 'projects/nul.tar.gz', 'projects/Aux',
+        'projects/prn.txt', 'projects/COM1', 'projects/lpt9.md', 'projects/com¹.md', 'projects/conin$',
+        'CON/x.md', 'projects/nul .md',
+    ])
+    def test_rejects_reserved_device_names(self, path):
+        with pytest.raises(ValueError, match='reserved device name'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('path', ['projects/x.md.', 'projects/dir./x.md', 'projects/dir /x.md'])
+    def test_rejects_trailing_dot_or_space(self, path):
+        with pytest.raises(ValueError, match='end with a dot or space'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('path', ['projects//x.md', 'projects/./x.md', './x.md', 'projects/'])
+    def test_rejects_empty_and_dot_parts(self, path):
+        with pytest.raises(ValueError, match='empty or . parts'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('path', ['', '   '])
+    def test_rejects_empty(self, path):
+        with pytest.raises(ValueError, match='cannot be empty'):
+            validate_vault_path(path)
+
+    @pytest.mark.parametrize('name', ['NUL', 'com3', 'a:b', 'x.'])
+    def test_project_names_follow_the_same_name_rules(self, name):
+        with pytest.raises(ValidationError):
+            ProjectInput(project=name)

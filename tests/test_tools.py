@@ -4,6 +4,7 @@ Tests for MCP tools.
 
 import os
 import stat
+import sys
 
 import pytest
 from datetime import datetime
@@ -399,3 +400,84 @@ class TestErrorsHideVaultPath:
         result = server.list_journal_entries_by_year_and_month('2025', '01')[0]
         self._assert_hidden(result, vault_path)
         assert '<vault>/journal' in result['error']
+
+
+class TestFileToolsStayInTheVault:
+    '''read_file and write_file can't reach anything outside the vault, on any platform.'''
+
+    @pytest.fixture
+    def outside(self, vault_path):
+        '''A secret file beside the vault, and a sibling folder whose name starts with the vault's.'''
+        secret = vault_path.parent / 'outside' / 'secret.md'
+        secret.parent.mkdir()
+        secret.write_text('SECRET')
+        sibling = vault_path.parent / f'{vault_path.name}-evil' / 'secret.md'
+        sibling.parent.mkdir()
+        sibling.write_text('SECRET')
+        (vault_path / 'projects' / 'p').mkdir()
+        yield secret
+        assert secret.read_text() == 'SECRET'
+        assert sibling.read_text() == 'SECRET'
+
+    def _attempts(self, vault_path, secret):
+        absolute = str(secret)
+        return [
+            '../outside/secret.md',
+            'projects/../../outside/secret.md',
+            '..\\outside\\secret.md',
+            f'../{vault_path.name}-evil/secret.md',
+            absolute,
+            absolute.replace('\\', '/'),
+            '/' + absolute.lstrip('/\\'),
+            '\\\\localhost\\share\\secret.md',
+            '\\\\?\\' + absolute,
+            'C:outside\\secret.md',
+            'projects/p/x.md:hidden',
+            'projects/p/NUL.md',
+        ]
+
+    def test_escape_attempts_are_refused(self, vault_path, outside):
+        for path in self._attempts(vault_path, outside):
+            read = server.read_file(path)
+            write = server.write_file(path, 'OVERWRITTEN')
+            assert read['success'] is False, path
+            assert write['success'] is False, path
+            assert 'Invalid input' in read['error'] and 'Invalid input' in write['error'], path
+        # nothing new was written inside the vault either
+        assert list((vault_path / 'projects').rglob('*')) == [vault_path / 'projects' / 'p']
+
+    def _link_or_skip(self, link, target):
+        '''A directory link from inside the vault to outside it: a symlink, or a junction on windows.'''
+        try:
+            link.symlink_to(target, target_is_directory=True)
+            return
+        except OSError:
+            pass
+        if sys.platform == 'win32':
+            import _winapi
+            _winapi.CreateJunction(str(target), str(link))
+            return
+        pytest.skip('cannot create a directory link here')
+
+    def test_links_out_of_the_vault_are_refused(self, vault_path, outside):
+        link = vault_path / 'projects' / 'p' / 'link'
+        self._link_or_skip(link, outside.parent)
+        for path in ('projects/p/link/secret.md', 'projects/p/link/new.md'):
+            read = server.read_file(path)
+            write = server.write_file(path, 'OVERWRITTEN')
+            assert 'outside vault' in read['error'] and 'outside vault' in write['error'], path
+        assert not (outside.parent / 'new.md').exists()
+
+    def test_file_symlink_out_of_the_vault_is_refused(self, vault_path, outside):
+        link = vault_path / 'projects' / 'p' / 'link.md'
+        try:
+            link.symlink_to(outside)
+        except OSError:
+            pytest.skip('cannot create a file symlink here (windows without developer mode)')
+        assert 'outside vault' in server.read_file('projects/p/link.md')['error']
+        assert 'outside vault' in server.write_file('projects/p/link.md', 'OVERWRITTEN')['error']
+
+    def test_backslash_paths_work_on_every_platform(self, vault_path):
+        assert server.write_file('projects\\garage\\plan.md', 'shelves') == {'success': True}
+        assert (vault_path / 'projects' / 'garage' / 'plan.md').read_text() == 'shelves'
+        assert server.read_file('projects/garage/plan.md') == {'content': 'shelves'}

@@ -10,8 +10,10 @@ import os
 import re
 import zoneinfo
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
+
+from obsidian_mcp.schema import validate_vault_path
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,11 @@ class VaultClient:
         '''
         Validate and resolve a vault-relative path.
 
+        Two checks, the same on every platform. The text must be a portable vault-relative
+        path (validate_vault_path: no absolute, drive or UNC paths, no .., no names Windows
+        can't hold). Then the path is fully resolved, following symlinks and junctions, and
+        must still be inside the vault. The resolved path is what callers then open.
+
         Args:
             file_path: Vault-relative file path
 
@@ -99,9 +106,14 @@ class VaultClient:
             Resolved absolute Path
 
         Raises:
-            VaultError: If path is outside vault directory
+            VaultError: If the path is invalid or outside vault directory
         '''
-        full_path = self._vault_path / Path(file_path)
+        try:
+            relative = validate_vault_path(file_path)
+        except ValueError as e:
+            logger.warning(f'invalid path blocked: {file_path!r}: {e}')
+            raise VaultError(f'Invalid path: {e}', file_path)
+        full_path = self._vault_path / PurePosixPath(relative)
         if not full_path.resolve().is_relative_to(self._vault_path):
             logger.warning(f'path traversal attempt blocked: {file_path}')
             raise VaultError('Path is outside vault directory', file_path)

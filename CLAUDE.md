@@ -104,7 +104,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - Type hints throughout
 - Consistent error handling patterns: `{"error": "message", "success": False}`
 - Structured logging with configurable levels (all lowercase except proper names)
-- Path security validation (no traversal attacks)
+- Path security validation, identical on macOS and Windows (the vault syncs between them). `validate_vault_path` in schema.py checks the text: `\` counts as `/`, no absolute, rooted, UNC or drive paths, no `..`/`.`/empty parts, and every name must be portable (`check_name`: no `< > : " | ? *` or control characters, which also rules out drive letters and NTFS streams; no reserved device names like `nul.md`; no trailing dot or space). `VaultClient._validate_path` runs that check for every caller, then resolves the path (following symlinks and junctions) and refuses anything outside the vault
 - Responses never reveal where the vault lives: errors name vault-relative paths and an OSError's reason (`strerror`), not its text, and every server error goes through `error_response`, which redacts the vault root as a backstop. Full detail goes to the log only
 - Context manager pattern for resource management
 
