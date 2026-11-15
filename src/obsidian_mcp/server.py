@@ -99,7 +99,7 @@ JOURNAL_FORMAT = '''
 journal files live at journal/YYYY/MM/YYYY-MM-DD.md, one file per day. never add a date
 heading or title to the file, obsidian handles this.
 
-a day's file has a # Daily Notes section that notes are added to through the day. other
+a day's file has a # daily notes section that notes are added to through the day. other
 top-level (#) sections, such as a daily recap, go above it.
 
 dates:
@@ -109,17 +109,19 @@ dates:
   confirm the date with them and pass it explicitly as date (YYYY-MM-DD).
 
 adding a note, the usual way to write to the journal:
-- add_note_to_journal_entry appends a note to the # Daily Notes section, creating the file
-  and the section if needed, and stamps it with the time. never write a timestamp yourself.
-- a note starts with a ### heading naming its topic, then the note on the next line.
-  organize longer notes with #### sections and ##### subsections, without skipping levels.
-  never use # or ## headings in a note.
+- add_note_to_journal_entry appends a note to the # daily notes section, creating the file
+  and the section if needed, and stamps it with the time. never write the heading or a
+  timestamp yourself.
+- a note starts with a ### heading naming its topic, then the note. organize longer notes
+  with #### sections and ##### subsections, without skipping levels. never use # or ##
+  headings in a note. the tool puts a blank line around every heading, so don't worry
+  about spacing.
 - write in first person, natural voice, valuable to read months later. keep quick
   references (links, commands, snippets, todos) in a #### section inside the note.
 
 other edits (date is YYYY-MM-DD, defaults to today):
 - prepend_to_journal_entry writes text exactly as given at the top of the file, after any
-  yaml frontmatter. use it for sections above the notes, such as a # Daily Recap. nothing
+  yaml frontmatter. use it for sections above the notes, such as a # daily recap. nothing
   is added, so end the text with a blank line to separate it from what follows.
 - append_to_journal_entry writes text exactly as given at the end of the file. nothing is
   added, so include the newlines you need.
@@ -377,7 +379,7 @@ def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str,
     Creates the file if it does not exist yet. YAML frontmatter stays first and the text
     goes right after it; all other existing content is kept unchanged below. Nothing is
     added between the text and what follows, so end the text with the newlines you need
-    (usually a blank line). Use it for sections above # Daily Notes, such as a recap.
+    (usually a blank line). Use it for sections above # daily notes, such as a recap.
 
     Args:
         text: Text to prepend, written byte for byte (markdown allowed)
@@ -408,15 +410,16 @@ def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str,
 @mcp.tool()
 def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
     '''
-    Add a note to the # Daily Notes section of a journal entry. This is the usual way to
+    Add a note to the # daily notes section of a journal entry. This is the usual way to
     write to the journal.
 
-    Creates the file with a # Daily Notes section if needed, then appends the note and
-    stamps it with the current time on the line after it. Never write a timestamp into
-    the note yourself. Existing content is never changed.
+    Creates the file with a # daily notes section if needed, then appends the note and
+    stamps it with the current time below it. Never write the heading or a timestamp
+    yourself. Existing content is never changed.
 
-    The note starts with a ### heading naming the topic, then the note on the next line.
-    Organize longer notes with #### sections and ##### subsections; never use # or ##.
+    The note starts with a ### heading naming the topic, then the note. Organize longer
+    notes with #### sections and ##### subsections; never use # or ##. The tool puts a
+    blank line around every heading and before the timestamp.
 
     Args:
         text: The note, starting with a ### heading (markdown allowed)

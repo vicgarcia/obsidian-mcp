@@ -295,9 +295,9 @@ class TestJournalEntryTools:
         second = server.add_note_to_journal_entry('### Walk\n#### Route\nriver trail')
         assert second['created'] is False
         assert (vault_path / first['path']).read_bytes() == (
-            b'\n\n# Daily Notes\n'
-            b'### Coffee\nfirst cup\n2026-11-14 09:14\n\n'
-            b'### Walk\n#### Route\nriver trail\n2026-11-14 15:40\n\n'
+            b'\n\n# daily notes\n\n'
+            b'### Coffee\n\nfirst cup\n\n2026-11-14 09:14\n\n'
+            b'### Walk\n\n#### Route\n\nriver trail\n\n2026-11-14 15:40\n\n'
         )
 
     def test_add_note_after_midnight_to_the_prior_day(self, vault_path, monkeypatch):
@@ -349,7 +349,7 @@ class TestJournalEntryTools:
     def test_server_instructions_describe_daily_notes(self):
         instructions = server.mcp.instructions
         assert instructions == server.JOURNAL_FORMAT
-        assert '# Daily Notes' in instructions
+        assert '# daily notes' in instructions
         assert '### heading' in instructions
         for tool in ('add_note_to_journal_entry', 'write_journal_entry', 'append_to_journal_entry',
                      'prepend_to_journal_entry', 'read_journal_entry', 'get_todays_date'):

@@ -138,37 +138,44 @@ read the journal entry for a date; returns its `path`, `exists: false` and empty
 
 #### journal format
 
-a day's file has a `# Daily Notes` section that notes are added to through the day, each stamped with the time it was added. other top-level sections, such as a daily recap, go above it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions
+a day's file has a `# daily notes` section that notes are added to through the day, each stamped with the time it was added. other top-level sections, such as a daily recap, go above it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions
 
 ```markdown
 
 
-# Daily Recap
-a good, busy day...
+# daily notes
 
-# Daily Notes
 ### Morning run
+
 first-person narrative...
+
 2026-11-14 07:50
 
 ### obsidian-mcp refactor
+
 #### Work
+
 ...
+
 #### Notes
+
 - links, commands, snippets, todos
+
 2026-11-14 15:40
 
 ```
 
-a new file starts as two blank lines and `# Daily Notes`. the file is always written with `\n` line endings, on mac and windows alike
+the file is always written with `\n` line endings, on mac and windows alike
 
 #### add_note_to_journal_entry
 
-add a note to the `# Daily Notes` section, the usual way to write to the journal. the note starts with a `###` heading naming its topic, then the note on the next line, organized with `####` and `#####` if it's long; `#` and `##` headings are rejected (outside code blocks). the tool:
+add a note to the `# daily notes` section, the usual way to write to the journal. the note starts with a `###` heading naming its topic, then the note, organized with `####` and `#####` if it's long; `#` and `##` headings are rejected (outside code blocks). the agent sends only the note; the tool handles the heading, the spacing and the timestamp:
 
-- creates the file as `\n\n# Daily Notes\n` if it's missing or empty, or appends `# Daily Notes` to a file that doesn't have it
-- trims the note, then appends it followed by a newline, the timestamp (`YYYY-MM-DD HH:MM`, 24-hour), and two newlines
-- stamps the current time even when `date` is an earlier day, so a note written at 00:45 for yesterday shows when it was really written
+- a missing or empty file starts as two blank lines, `# daily notes` and a blank line
+- a file without the heading gets `# daily notes` appended two blank lines below its content. any case counts as the heading, so an older `# Daily Notes` isn't duplicated
+- the note is laid out with a blank line before and after every heading and runs of blank lines collapsed to one; code blocks are left exactly as written
+- the note is appended followed by a blank line, the timestamp (`YYYY-MM-DD HH:MM`, 24-hour) and a blank line, so notes sit one blank line apart
+- the timestamp is the current time even when `date` is an earlier day, so a note written at 00:45 for yesterday shows when it was really written
 
 **parameters:**
 - `text` (required): the note, starting with a `###` heading

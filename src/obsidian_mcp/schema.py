@@ -93,7 +93,7 @@ class JournalNoteInput(BaseModel):
     Input validation for adding a note to a journal entry's daily notes (date defaults to today).
 
     The note is trimmed, must start with a ### heading, and can't hold # or ## headings
-    outside code blocks, which would break out of the # Daily Notes section.
+    outside code blocks, which would break out of the # daily notes section.
     '''
     text: str
     date: Optional[str] = None

@@ -20,10 +20,48 @@ logger = logging.getLogger(__name__)
 # yaml frontmatter: a --- line at the very start, closed by the next --- (or ...) line
 _FRONTMATTER = re.compile(r'\A---[ \t]*\r?\n(?:.*?\r?\n)??(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)', re.DOTALL)
 
-# the section notes are added to through the day, and the file a day's notes start from
-DAILY_NOTES_HEADING = '# Daily Notes'
-DAILY_NOTES_SKELETON = f'\n\n{DAILY_NOTES_HEADING}\n'
-_DAILY_NOTES = re.compile(r'^# Daily Notes[ \t]*\r?$', re.MULTILINE)
+# the section notes are added to through the day. it is written lowercase, after two blank
+# lines, and found in any case so a file with an older # Daily Notes doesn't get a second one
+DAILY_NOTES_HEADING = '# daily notes'
+_DAILY_NOTES = re.compile(r'^# daily notes[ \t]*\r?$', re.MULTILINE | re.IGNORECASE)
+
+# a code fence opener or closer, and any markdown heading (up to 3 spaces of indent)
+_FENCE = re.compile(r'^ {0,3}(```|~~~)')
+_HEADING = re.compile(r'^ {0,3}#{1,6}[ \t]')
+
+
+def _trailing_newlines(text: str) -> int:
+    '''How many line breaks the text ends with (\n or \r\n).'''
+    return text[len(text.rstrip('\r\n')):].count('\n')
+
+
+def space_note(text: str) -> str:
+    '''
+    Lay a note out with even spacing: one blank line before and after every heading, and
+    runs of blank lines collapsed to one. Code blocks are left exactly as written. The
+    result has no leading or trailing blank lines and uses \n line endings.
+    '''
+    out: List[str] = []
+    fenced = False
+    for line in text.replace('\r\n', '\n').split('\n'):
+        if fenced or _FENCE.match(line):
+            if _FENCE.match(line):
+                fenced = not fenced
+            out.append(line)
+        elif not line.strip():
+            if out and out[-1] != '':
+                out.append('')
+        elif _HEADING.match(line):
+            if out and out[-1] != '':
+                out.append('')
+            out.extend([line, ''])
+        else:
+            out.append(line)
+    while out and out[-1] == '':
+        out.pop()
+    while out and out[0] == '':
+        out.pop(0)
+    return '\n'.join(out)
 
 
 def _reason(error: Exception) -> str:
@@ -449,16 +487,21 @@ class VaultClient:
 
     def add_note_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
-        Append a note to the Daily Notes section of a journal entry, stamped with the time.
+        Append a note to the daily notes section of a journal entry, stamped with the time.
 
-        A missing, empty or whitespace-only file becomes the daily notes skeleton first.
-        A file without a # Daily Notes line gets one appended, after a blank line. A file
-        that doesn't end in a newline gets one, so the note starts on its own line. The
-        note is then appended as: text, newline, YYYY-MM-DD HH:MM, two newlines. The
-        timestamp is always the current local time, even when date is an earlier day.
+        The section heading is the tool's job, never the agent's:
+        - a missing, empty or whitespace-only file becomes two blank lines, # daily notes
+          and a blank line
+        - a file with content but no # daily notes line (in any case) gets the heading
+          appended, two blank lines below the content, then a blank line
+        - a file with the heading gets whatever newlines make it end in one blank line
+
+        The note is laid out by space_note (a blank line around every heading), then
+        appended as: note, blank line, YYYY-MM-DD HH:MM, blank line. The timestamp is
+        always the current local time, even when date is an earlier day.
 
         Args:
-            text: The note, starting with a ### heading, with no trailing newline
+            text: The note, starting with a ### heading
             date: Date of the journal entry. Defaults to today.
 
         Returns:
@@ -470,26 +513,20 @@ class VaultClient:
         journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
         timestamp = self.get_local_datetime().strftime('%Y-%m-%d %H:%M')
-        note = f'{text}\n{timestamp}\n\n'
+        note = f'{space_note(text)}\n\n{timestamp}\n\n'
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
             existing = self._read_journal_text(journal_path, full_path)
+            trailing = _trailing_newlines(existing)
 
             if not existing.strip():
-                mode, lead = 'w', DAILY_NOTES_SKELETON
+                mode, lead = 'w', f'\n\n{DAILY_NOTES_HEADING}\n\n'
             elif not _DAILY_NOTES.search(existing):
-                if existing.endswith('\n\n'):
-                    gap = ''
-                elif existing.endswith('\n'):
-                    gap = '\n'
-                else:
-                    gap = '\n\n'
-                mode, lead = 'a', f'{gap}{DAILY_NOTES_HEADING}\n'
-            elif not existing.endswith('\n'):
-                mode, lead = 'a', '\n'
+                # three line breaks end the last line and leave two blank lines
+                mode, lead = 'a', '\n' * max(0, 3 - trailing) + f'{DAILY_NOTES_HEADING}\n\n'
             else:
-                mode, lead = 'a', ''
+                mode, lead = 'a', '\n' * max(0, 2 - trailing)
 
             with open(full_path, mode, encoding='utf-8', newline='') as f:
                 f.write(lead + note)

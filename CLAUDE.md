@@ -58,12 +58,12 @@ Thirteen core MCP tools (see README.md for full documentation):
 - `get_todays_date` - Today's date, 12-hour time with AM/PM, day of the week and timezone (TZ)
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `read_journal_entry` - Read an entry by date
-- `add_note_to_journal_entry` - Append a note to the `# Daily Notes` section with a `YYYY-MM-DD HH:MM` timestamp line, creating the `\n\n# Daily Notes\n` skeleton or the heading if needed (optional `date`, defaults to today; the stamp is always the current time)
+- `add_note_to_journal_entry` - Append a note to the `# daily notes` section, which the tool creates (two blank lines before it, a blank line after) in an empty file or one without it, found in any case. `space_note` puts a blank line around every heading, then the note gets a blank line and a `YYYY-MM-DD HH:MM` timestamp line (optional `date`, defaults to today; the stamp is always the current time)
 - `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry. Append and prepend write the text byte for byte, adding and trimming nothing; prepend goes right after YAML frontmatter
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
 
-Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: a `# Daily Notes` section of `###` notes (`####` / `#####` within), with other `#` sections such as a recap prepended above it. Every journal write uses `newline=''` so files stay LF on Windows.
+Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: a `# daily notes` section of `###` notes (`####` / `#####` within), with other `#` sections such as a recap prepended above it. Every journal write uses `newline=''` so files stay LF on Windows.
 
 ## Implementation Notes
 
