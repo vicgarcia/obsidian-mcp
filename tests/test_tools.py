@@ -61,70 +61,42 @@ class TestDateTools:
     '''Test date tools.'''
 
     @pytest.mark.parametrize('tz', ['Pacific/Kiritimati', 'Pacific/Pago_Pago'])
-    def test_tz_decides_today_for_every_date_tool(self, monkeypatch, tz):
+    def test_tz_decides_today_for_every_date_tool(self, monkeypatch, tz, vault_path):
         '''These zones are 25 hours apart, so at least one differs from the system date.'''
         monkeypatch.setenv('TZ', tz)
         expected = datetime.now(ZoneInfo(tz))
 
-        result = server.get_current_timestamp()
+        result = server.get_todays_date()
         assert result['date'] == expected.strftime('%Y-%m-%d')
         assert result['timezone'] == tz
-        assert expected.strftime('%Y-%m-%d') in server.list_todays_journal_entry()['path']
+        note = server.add_note_to_journal_entry('### Topic\nbody')
+        assert expected.strftime('%Y-%m-%d') in note['path']
+        assert note['timestamp'].startswith(expected.strftime('%Y-%m-%d'))
 
-    def test_get_current_timestamp(self, monkeypatch):
-        '''Test the current timestamp has every format and they agree.'''
+    def test_get_todays_date(self, monkeypatch):
+        '''Today's date has the date, time, weekday and timezone, and they agree.'''
         monkeypatch.setenv('TZ', 'America/New_York')
-        result = server.get_current_timestamp()
-        assert set(result) == {
-            'iso', 'utc', 'unix', 'date', 'time', 'time_12h', 'day_of_week',
-            'human_date', 'human', 'iso_week', 'timezone', 'utc_offset',
-        }
-        local = datetime.fromisoformat(result['iso'])
-        assert local.strftime('%Y-%m-%d') == result['date']
-        assert local.strftime('%H:%M:%S') == result['time']
-        assert result['iso'].endswith(result['utc_offset'])
-        assert result['utc_offset'] in ('-05:00', '-04:00')
-        assert datetime.fromisoformat(result['utc']) == local
-        assert int(local.timestamp()) == result['unix']
+        result = server.get_todays_date()
+        assert set(result) == {'date', 'time', 'day_of_week', 'timezone'}
+        local = datetime.strptime(f"{result['date']} {result['time']}", '%Y-%m-%d %H:%M')
+        assert local.strftime('%A') == result['day_of_week']
         assert result['timezone'] == 'America/New_York'
 
-    def test_format_timestamp(self):
-        '''Test formatting a fixed moment.'''
-        now = datetime(2026, 11, 8, 14, 5, 9, tzinfo=ZoneInfo('America/New_York'))
-        assert server.format_timestamp(now) | {'timezone': None} == {
-            'iso': '2026-11-08T14:05:09-05:00',
-            'utc': '2026-11-08T19:05:09Z',
-            'unix': 1794164709,
-            'date': '2026-11-08',
-            'time': '14:05:09',
-            'time_12h': '2:05 PM',
-            'day_of_week': 'Sunday',
-            'human_date': 'Sunday November 8, 2026',
-            'human': 'Sunday November 8, 2026 at 2:05 PM',
-            'iso_week': '2026-W45',
-            'timezone': None,
-            'utc_offset': '-05:00',
+    def test_get_todays_date_fixed_moment(self, monkeypatch):
+        '''A fixed moment formats as 24-hour time with no seconds.'''
+        now = datetime(2026, 11, 14, 9, 5, 59, tzinfo=ZoneInfo('America/New_York'))
+        monkeypatch.setattr(VaultClient, 'get_local_datetime', lambda self: now)
+        monkeypatch.setenv('TZ', 'America/New_York')
+        assert server.get_todays_date() == {
+            'date': '2026-11-14',
+            'time': '09:05',
+            'day_of_week': 'Saturday',
+            'timezone': 'America/New_York',
         }
-
-    def test_format_timestamp_midnight_and_naive(self):
-        '''Midnight is 12 AM, and a naive datetime leaves the offset fields empty.'''
-        result = server.format_timestamp(datetime(2026, 1, 1, 0, 30))
-        assert result['time_12h'] == '12:30 AM'
-        assert result['utc_offset'] == ''
-        assert result['utc'] == ''
 
 
 class TestJournalTools:
     '''Test journal tools.'''
-
-    def test_list_todays_journal_entry(self):
-        '''Test getting today's journal entry path.'''
-        result = server.list_todays_journal_entry()
-        assert 'path' in result
-        assert 'name' in result
-        assert result['path'].startswith('journal/')
-        assert result['path'].endswith('.md')
-
 
     def test_list_journal_entries_by_year_and_month(self, vault_path):
         '''Test listing journal entries.'''
@@ -232,7 +204,7 @@ class TestWikiTools:
 
 
 class TestJournalEntryTools:
-    '''Test reading journal entries by date and appending to today's entry.'''
+    '''Test reading journal entries by date and editing them.'''
 
     def test_read_journal_entry(self):
         result = server.read_journal_entry('2025-01-15')
@@ -250,68 +222,122 @@ class TestJournalEntryTools:
         assert result['success'] is False
         assert 'Invalid input' in result['error']
 
-    def test_append_to_journal_entry_today(self, vault_path):
+    def test_append_to_journal_entry_is_exact(self, vault_path):
         result = server.append_to_journal_entry('  remember the milk  ')
         assert result['success'] is True
         assert result['created'] is True
-        assert result['path'] == server.list_todays_journal_entry()['path']
-        assert (vault_path / result['path']).read_text() == 'remember the milk\n'
+        assert result['path'] == server.read_journal_entry(server.get_todays_date()['date'])['path']
+        path = vault_path / result['path']
+        assert path.read_bytes() == b'  remember the milk  '
 
-        again = server.append_to_journal_entry('and eggs')
+        again = server.append_to_journal_entry('and eggs\n')
         assert again['created'] is False
-        assert (vault_path / result['path']).read_text() == 'remember the milk\n\nand eggs\n'
+        assert path.read_bytes() == b'  remember the milk  and eggs\n'
 
     def test_append_to_journal_entry_by_date(self, vault_path):
-        result = server.append_to_journal_entry('### Late night\n\nwrapped up', date='2025-01-15')
+        result = server.append_to_journal_entry('\n### Late night\nwrapped up\n', date='2025-01-15')
         assert result['path'] == 'journal/2025/01/2025-01-15.md'
         assert result['created'] is False
         assert (vault_path / result['path']).read_text().endswith(
-            '#journal #2025 #january\n\n### Late night\n\nwrapped up\n'
+            '#journal #2025 #january\n\n### Late night\nwrapped up\n'
         )
 
-    def test_prepend_to_journal_entry_today(self, vault_path):
-        result = server.prepend_to_journal_entry('### Evening\n\nread a book')
+    def test_prepend_to_journal_entry_is_exact(self, vault_path):
+        result = server.prepend_to_journal_entry('# Recap\nread a book')
         assert result['success'] is True
         assert result['created'] is True
         path = vault_path / result['path']
-        assert path.read_text() == '### Evening\n\nread a book\n'
+        assert path.read_bytes() == b'# Recap\nread a book'
 
-        again = server.prepend_to_journal_entry('### Night\n\nwent to bed')
+        again = server.prepend_to_journal_entry('# Mood\ngood\n\n')
         assert again['created'] is False
-        assert path.read_text() == '### Night\n\nwent to bed\n\n### Evening\n\nread a book\n'
+        assert path.read_bytes() == b'# Mood\ngood\n\n# Recap\nread a book'
 
     def test_prepend_to_journal_entry_by_date(self, vault_path):
-        result = server.prepend_to_journal_entry('### Morning\n\ncoffee', date='2025-01-15')
+        result = server.prepend_to_journal_entry('# Recap\ncoffee\n\n', date='2025-01-15')
         content = (vault_path / result['path']).read_text()
-        assert content.startswith('### Morning\n\ncoffee\n\n# January 15, 2025')
+        assert content.startswith('# Recap\ncoffee\n\n# January 15, 2025')
 
     def test_write_journal_entry(self, vault_path):
         result = server.write_journal_entry('### Rewritten\n\nall new\n', date='2025-01-15')
         assert result['success'] is True
         assert result['created'] is False
-        assert (vault_path / result['path']).read_text() == '### Rewritten\n\nall new\n'
+        assert (vault_path / result['path']).read_bytes() == b'### Rewritten\n\nall new\n'
 
         today = server.write_journal_entry('### Today\n')
         assert today['created'] is True
-        assert today['path'] == server.list_todays_journal_entry()['path']
+        assert today['path'] == server.read_journal_entry(server.get_todays_date()['date'])['path']
+
+    def test_add_note_to_journal_entry_today(self, vault_path, monkeypatch):
+        now = datetime(2026, 11, 14, 9, 14)
+        monkeypatch.setattr(VaultClient, 'get_local_datetime', lambda self: now)
+        first = server.add_note_to_journal_entry('### Coffee\nfirst cup\n')
+        assert first == {
+            'success': True,
+            'path': 'journal/2026/11/2026-11-14.md',
+            'created': True,
+            'timestamp': '2026-11-14 09:14',
+        }
+        now = datetime(2026, 11, 14, 15, 40)
+        second = server.add_note_to_journal_entry('### Walk\n#### Route\nriver trail')
+        assert second['created'] is False
+        assert (vault_path / first['path']).read_bytes() == (
+            b'\n\n# Daily Notes\n'
+            b'### Coffee\nfirst cup\n2026-11-14 09:14\n\n'
+            b'### Walk\n#### Route\nriver trail\n2026-11-14 15:40\n\n'
+        )
+
+    def test_add_note_after_midnight_to_the_prior_day(self, vault_path, monkeypatch):
+        now = datetime(2026, 11, 15, 0, 45)
+        monkeypatch.setattr(VaultClient, 'get_local_datetime', lambda self: now)
+        result = server.add_note_to_journal_entry('### Late night\nstill up', date='2026-11-14')
+        assert result['path'] == 'journal/2026/11/2026-11-14.md'
+        assert result['timestamp'] == '2026-11-15 00:45'
+
+    @pytest.mark.parametrize('bad', [
+        '',
+        '   ',
+        'no heading',
+        '#### Section first',
+        '## Topic',
+        '### Topic\n## Breaks out',
+        '### Topic\n# Breaks out',
+    ])
+    def test_add_note_rejects_bad_notes(self, bad, vault_path):
+        result = server.add_note_to_journal_entry(bad)
+        assert result['success'] is False
+        assert 'Invalid input' in result['error']
+        assert list((vault_path / 'journal').rglob('*.md')) == [vault_path / 'journal/2025/01/2025-01-15.md']
+
+    def test_add_note_allows_hash_lines_in_code_blocks(self, vault_path):
+        result = server.add_note_to_journal_entry('### Setup\n```bash\n# install deps\nuv sync\n```')
+        assert result['success'] is True
 
     @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry', 'write_journal_entry'])
     def test_journal_edit_tools_reject_empty_text(self, tool):
-        result = getattr(server, tool)('   ')
+        result = getattr(server, tool)('')
         assert result['success'] is False
         assert 'Invalid input' in result['error']
 
-    @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry', 'write_journal_entry'])
+    @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry'])
+    def test_append_and_prepend_accept_whitespace_only_text(self, tool, vault_path):
+        result = getattr(server, tool)('\n\n')
+        assert result['success'] is True
+        assert (vault_path / result['path']).read_bytes() == b'\n\n'
+
+    @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry',
+                                      'write_journal_entry', 'add_note_to_journal_entry'])
     @pytest.mark.parametrize('bad', ['2025-1-15', '2025-02-30', 'yesterday', '../2025-01-15'])
     def test_journal_edit_tools_reject_bad_dates(self, tool, bad, vault_path):
         result = getattr(server, tool)('### Entry', date=bad)
         assert result['success'] is False
         assert 'Invalid input' in result['error']
 
-    def test_server_instructions_describe_entry_headings(self):
+    def test_server_instructions_describe_daily_notes(self):
         instructions = server.mcp.instructions
         assert instructions == server.JOURNAL_FORMAT
+        assert '# Daily Notes' in instructions
         assert '### heading' in instructions
-        for tool in ('write_journal_entry', 'append_to_journal_entry', 'prepend_to_journal_entry',
-                     'get_current_timestamp'):
+        for tool in ('add_note_to_journal_entry', 'write_journal_entry', 'append_to_journal_entry',
+                     'prepend_to_journal_entry', 'read_journal_entry', 'get_todays_date'):
             assert tool in instructions

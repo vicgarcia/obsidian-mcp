@@ -55,15 +55,15 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 ## Tools Overview
 Thirteen core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
-- `get_current_timestamp` - Current local date and time in every common format (ISO, UTC, unix, date, 12/24h time, human, ISO week, timezone)
-- `list_todays_journal_entry` - Get today's journal path
+- `get_todays_date` - Today's date, 24-hour HH:MM time, day of the week and timezone (TZ)
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `read_journal_entry` - Read an entry by date
-- `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry (optional `date`, defaults to today; prepend goes after YAML frontmatter)
-
-Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: each entry starts with a `###` heading and uses `####` / `#####` within it.
+- `add_note_to_journal_entry` - Append a note to the `# Daily Notes` section with a `YYYY-MM-DD HH:MM` timestamp line, creating the `\n\n# Daily Notes\n` skeleton or the heading if needed (optional `date`, defaults to today; the stamp is always the current time)
+- `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry. Append and prepend write the text byte for byte, adding and trimming nothing; prepend goes right after YAML frontmatter
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
+
+Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: a `# Daily Notes` section of `###` notes (`####` / `#####` within), with other `#` sections such as a recap prepended above it. Every journal write uses `newline=''` so files stay LF on Windows.
 
 ## Implementation Notes
 
@@ -79,7 +79,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 
 #### schema.py (Data Models)
 - `YearMonthInput` - Year/month validation
-- `JournalDateInput` / `JournalTextInput` / `JournalWriteInput` - Journal date and edit validation (optional date defaults to today)
+- `JournalDateInput` / `JournalTextInput` / `JournalWriteInput` / `JournalNoteInput` - Journal date and edit validation (optional date defaults to today; `JournalTextInput` keeps text exact, `JournalNoteInput` requires a leading `###` and rejects `#`/`##` outside code fences)
 - `FilePathInput` - File path validation with traversal protection
 - `FileWriteInput` - File write input validation
 - `ProjectInput` - Project name validation
@@ -90,7 +90,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - `VaultError` - Custom exception for vault errors
 - File operations: `read_file()`, `write_file()`, `file_exists()`
 - Directory operations: `list_files()`, `list_directories()`, `create_directory()`
-- Journal operations: `get_journal_path()`, `list_journal_entries()`, `read_journal_entry()`, `write_journal_entry()`, `append_to_journal()`, `prepend_to_journal()`
+- Journal operations: `get_journal_path()`, `list_journal_entries()`, `read_journal_entry()`, `write_journal_entry()`, `append_to_journal()`, `prepend_to_journal()`, `add_note_to_journal()`
 - Project operations: `list_projects()`, `list_project_content()`, `create_project()`
 - Wiki operations: `list_wiki()`
 

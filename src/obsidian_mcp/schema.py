@@ -58,16 +58,61 @@ class JournalDateInput(BaseModel):
 
 
 class JournalTextInput(BaseModel):
-    '''Input validation for appending or prepending to a journal entry (date defaults to today).'''
+    '''
+    Input validation for appending or prepending to a journal entry (date defaults to today).
+
+    The text is kept exactly as given, whitespace and newlines included.
+    '''
     text: str
     date: Optional[str] = None
 
     @field_validator('text')
     @classmethod
     def validate_text(cls, v: str) -> str:
-        if not v or v.strip() == '':
+        if v == '':
             raise ValueError('Text cannot be empty')
-        return v.strip()
+        return v
+
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else _validate_journal_date(v)
+
+    def entry_date(self) -> Optional[datetime]:
+        '''The parsed entry date, or None for today.'''
+        return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
+
+
+# a code fence opener or closer, and a # or ## heading (up to 3 spaces of indent is still a heading)
+_FENCE = re.compile(r'^ {0,3}(```|~~~)')
+_TOP_HEADING = re.compile(r'^ {0,3}#{1,2}(?:[ \t]|$)')
+
+
+class JournalNoteInput(BaseModel):
+    '''
+    Input validation for adding a note to a journal entry's daily notes (date defaults to today).
+
+    The note is trimmed, must start with a ### heading, and can't hold # or ## headings
+    outside code blocks, which would break out of the # Daily Notes section.
+    '''
+    text: str
+    date: Optional[str] = None
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Note cannot be empty')
+        if not v.startswith('### '):
+            raise ValueError('Note must start with a ### heading')
+        fenced = False
+        for line in v.splitlines():
+            if _FENCE.match(line):
+                fenced = not fenced
+            elif not fenced and _TOP_HEADING.match(line):
+                raise ValueError('Note cannot contain # or ## headings, use #### and ##### within it')
+        return v
 
     @field_validator('date')
     @classmethod

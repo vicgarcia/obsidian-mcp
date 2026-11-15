@@ -259,44 +259,33 @@ class TestJournalReadAndAppend:
             result = vault.read_journal_entry(datetime(2025, 1, 16))
             assert result == {'path': 'journal/2025/01/2025-01-16.md', 'exists': False, 'content': ''}
 
-    def test_append_creates_entry(self, vault_path):
+    def test_append_creates_entry_with_exact_text(self, vault_path):
         with VaultClient(str(vault_path)) as vault:
             result = vault.append_to_journal('first note', datetime(2025, 2, 3))
             assert result == {'path': 'journal/2025/02/2025-02-03.md', 'created': True}
-            assert (vault_path / 'journal/2025/02/2025-02-03.md').read_bytes() == b'first note\n'
+        assert (vault_path / 'journal/2025/02/2025-02-03.md').read_bytes() == b'first note'
 
-    def test_append_adds_paragraph_and_keeps_existing_content(self, vault_path):
+    def test_append_keeps_existing_content_and_adds_nothing(self, vault_path):
         entry = vault_path / 'journal/2025/01/2025-01-15.md'
         before = entry.read_bytes()
         with VaultClient(str(vault_path)) as vault:
             result = vault.append_to_journal('saw a heron', datetime(2025, 1, 15))
             assert result['created'] is False
-        after = entry.read_bytes()
-        # the seed file may be crlf on windows; the append must match whatever it uses
-        nl = b'\r\n' if b'\r\n' in before else b'\n'
-        assert after == before + nl + b'saw a heron' + nl
+        assert entry.read_bytes() == before + b'saw a heron'
 
-    def test_append_twice_separates_with_one_blank_line(self, vault_path):
+    def test_append_twice_concatenates(self, vault_path):
         with VaultClient(str(vault_path)) as vault:
-            vault.append_to_journal('one', datetime(2025, 3, 1))
+            vault.append_to_journal('one\n', datetime(2025, 3, 1))
             vault.append_to_journal('two', datetime(2025, 3, 1))
-        assert (vault_path / 'journal/2025/03/2025-03-01.md').read_bytes() == b'one\n\ntwo\n'
+        assert (vault_path / 'journal/2025/03/2025-03-01.md').read_bytes() == b'one\ntwo'
 
-    def test_append_to_file_without_trailing_newline(self, vault_path):
-        entry = vault_path / 'journal/2025/04/2025-04-01.md'
-        entry.parent.mkdir(parents=True)
-        entry.write_bytes(b'narrative')
-        with VaultClient(str(vault_path)) as vault:
-            vault.append_to_journal('note', datetime(2025, 4, 1))
-        assert entry.read_bytes() == b'narrative\n\nnote\n'
-
-    def test_append_preserves_crlf_line_endings(self, vault_path):
+    def test_append_writes_line_endings_as_given(self, vault_path):
         entry = vault_path / 'journal/2025/05/2025-05-01.md'
         entry.parent.mkdir(parents=True)
-        entry.write_bytes(b'line one\r\nline two\r\n')
+        entry.write_bytes(b'line one\r\n')
         with VaultClient(str(vault_path)) as vault:
-            vault.append_to_journal('a\nb', datetime(2025, 5, 1))
-        assert entry.read_bytes() == b'line one\r\nline two\r\n\r\na\r\nb\r\n'
+            vault.append_to_journal('a\nb\n', datetime(2025, 5, 1))
+        assert entry.read_bytes() == b'line one\r\na\nb\n'
 
     def test_append_defaults_to_today(self, vault_path):
         with VaultClient(str(vault_path)) as vault:
@@ -314,48 +303,48 @@ class TestJournalPrependAndWrite:
         entry.write_bytes(content)
         return entry
 
-    def test_prepend_creates_entry(self, vault_path):
+    def test_prepend_creates_entry_with_exact_text(self, vault_path):
         with VaultClient(str(vault_path)) as vault:
             result = vault.prepend_to_journal('### First', datetime(2025, 2, 3))
             assert result == {'path': 'journal/2025/02/2025-02-03.md', 'created': True}
-        assert (vault_path / 'journal/2025/02/2025-02-03.md').read_bytes() == b'### First\n'
+        assert (vault_path / 'journal/2025/02/2025-02-03.md').read_bytes() == b'### First'
 
-    def test_prepend_keeps_existing_content_below(self, vault_path):
+    def test_prepend_keeps_existing_content_and_adds_nothing(self, vault_path):
         entry = self._entry(vault_path, b'### Old\n\nold text\n')
         with VaultClient(str(vault_path)) as vault:
-            result = vault.prepend_to_journal('### New\n\nnew text', datetime(2025, 6, 1))
+            result = vault.prepend_to_journal('### New\nnew text', datetime(2025, 6, 1))
             assert result['created'] is False
-        assert entry.read_bytes() == b'### New\n\nnew text\n\n### Old\n\nold text\n'
+        assert entry.read_bytes() == b'### New\nnew text### Old\n\nold text\n'
 
-    def test_prepend_collapses_leading_blank_lines(self, vault_path):
-        entry = self._entry(vault_path, b'\n\n### Old\n')
+    def test_prepend_keeps_leading_blank_lines(self, vault_path):
+        entry = self._entry(vault_path, b'\n\n# Daily Notes\n')
         with VaultClient(str(vault_path)) as vault:
-            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
-        assert entry.read_bytes() == b'### New\n\n### Old\n'
+            vault.prepend_to_journal('# Recap\ngood day\n', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'# Recap\ngood day\n\n\n# Daily Notes\n'
 
-    def test_prepend_goes_after_frontmatter(self, vault_path):
+    def test_prepend_goes_right_after_frontmatter(self, vault_path):
         entry = self._entry(vault_path, b'---\ntags: [journal]\n---\n### Old\n')
         with VaultClient(str(vault_path)) as vault:
-            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
-        assert entry.read_bytes() == b'---\ntags: [journal]\n---\n\n### New\n\n### Old\n'
+            vault.prepend_to_journal('### New\n', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'---\ntags: [journal]\n---\n### New\n### Old\n'
 
     def test_prepend_after_frontmatter_only_file(self, vault_path):
         entry = self._entry(vault_path, b'---\nmood: good\n---')
         with VaultClient(str(vault_path)) as vault:
             vault.prepend_to_journal('### New', datetime(2025, 6, 1))
-        assert entry.read_bytes() == b'---\nmood: good\n---\n\n### New\n'
+        assert entry.read_bytes() == b'---\nmood: good\n---\n### New'
 
     def test_prepend_treats_unclosed_rule_as_content(self, vault_path):
         entry = self._entry(vault_path, b'---\n### Old\n')
         with VaultClient(str(vault_path)) as vault:
-            vault.prepend_to_journal('### New', datetime(2025, 6, 1))
-        assert entry.read_bytes() == b'### New\n\n---\n### Old\n'
+            vault.prepend_to_journal('### New\n', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'### New\n---\n### Old\n'
 
-    def test_prepend_preserves_crlf_line_endings(self, vault_path):
+    def test_prepend_keeps_crlf_frontmatter_and_writes_text_as_given(self, vault_path):
         entry = self._entry(vault_path, b'---\r\na: 1\r\n---\r\n### Old\r\n')
         with VaultClient(str(vault_path)) as vault:
-            vault.prepend_to_journal('### New\nline', datetime(2025, 6, 1))
-        assert entry.read_bytes() == b'---\r\na: 1\r\n---\r\n\r\n### New\r\nline\r\n\r\n### Old\r\n'
+            vault.prepend_to_journal('### New\nline\n', datetime(2025, 6, 1))
+        assert entry.read_bytes() == b'---\r\na: 1\r\n---\r\n### New\nline\n### Old\r\n'
 
     def test_prepend_defaults_to_today(self, vault_path):
         with VaultClient(str(vault_path)) as vault:
@@ -367,10 +356,103 @@ class TestJournalPrependAndWrite:
         with VaultClient(str(vault_path)) as vault:
             result = vault.write_journal_entry('### Replaced\n', datetime(2025, 6, 1))
             assert result == {'path': 'journal/2025/06/2025-06-01.md', 'created': False}
-        assert entry.read_text() == '### Replaced\n'
+        assert entry.read_bytes() == b'### Replaced\n'
 
     def test_write_journal_entry_creates(self, vault_path):
         with VaultClient(str(vault_path)) as vault:
             result = vault.write_journal_entry('### New\n', datetime(2025, 7, 4))
             assert result['created'] is True
         assert (vault_path / 'journal/2025/07/2025-07-04.md').exists()
+
+    def test_write_file_keeps_lf_line_endings(self, vault_path):
+        '''Windows text mode would write crlf; the vault stays lf.'''
+        with VaultClient(str(vault_path)) as vault:
+            vault.write_file('projects/notes.md', 'a\nb\n')
+        assert (vault_path / 'projects/notes.md').read_bytes() == b'a\nb\n'
+
+
+class TestJournalNotes:
+    '''Test adding notes to the daily notes section.'''
+
+    DAY = datetime(2026, 11, 14)
+
+    @pytest.fixture
+    def clock(self, monkeypatch):
+        '''Pin the local time; set clock.now to move it.'''
+        class Clock:
+            now = datetime(2026, 11, 14, 9, 14)
+        monkeypatch.setattr(VaultClient, 'get_local_datetime', lambda self: Clock.now)
+        return Clock
+
+    def _entry(self, vault_path, content: bytes | None = None):
+        entry = vault_path / 'journal/2026/11/2026-11-14.md'
+        if content is not None:
+            entry.parent.mkdir(parents=True, exist_ok=True)
+            entry.write_bytes(content)
+        return entry
+
+    def test_note_creates_the_skeleton(self, vault_path, clock):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.add_note_to_journal('### Coffee\nfirst cup', self.DAY)
+        assert result == {'path': 'journal/2026/11/2026-11-14.md', 'created': True, 'timestamp': '2026-11-14 09:14'}
+        assert self._entry(vault_path).read_bytes() == b'\n\n# Daily Notes\n### Coffee\nfirst cup\n2026-11-14 09:14\n\n'
+
+    def test_notes_through_the_day(self, vault_path, clock):
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### One\nfirst', self.DAY)
+            clock.now = datetime(2026, 11, 14, 23, 59)
+            vault.add_note_to_journal('### Two\nsecond', self.DAY)
+        assert self._entry(vault_path).read_bytes() == (
+            b'\n\n# Daily Notes\n### One\nfirst\n2026-11-14 09:14\n\n### Two\nsecond\n2026-11-14 23:59\n\n'
+        )
+
+    @pytest.mark.parametrize('content', [b'', b'\n', b'  \n\n'])
+    def test_empty_file_gets_the_skeleton(self, vault_path, clock, content):
+        entry = self._entry(vault_path, content)
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.add_note_to_journal('### Note\nx', self.DAY)
+            assert result['created'] is False
+        assert entry.read_bytes() == b'\n\n# Daily Notes\n### Note\nx\n2026-11-14 09:14\n\n'
+
+    @pytest.mark.parametrize('content, gap', [
+        (b'# Recap\ngood day', b'\n\n'),
+        (b'# Recap\ngood day\n', b'\n'),
+        (b'# Recap\ngood day\n\n', b''),
+    ])
+    def test_heading_is_added_after_a_blank_line(self, vault_path, clock, content, gap):
+        entry = self._entry(vault_path, content)
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### Note\nx', self.DAY)
+        assert entry.read_bytes() == content + gap + b'# Daily Notes\n### Note\nx\n2026-11-14 09:14\n\n'
+
+    def test_recap_prepended_above_existing_notes(self, vault_path, clock):
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### Note\nx', self.DAY)
+            vault.prepend_to_journal('# Daily Recap\nall good', self.DAY)
+            vault.add_note_to_journal('### Later\ny', self.DAY)
+        assert self._entry(vault_path).read_bytes() == (
+            b'# Daily Recap\nall good\n\n# Daily Notes\n### Note\nx\n2026-11-14 09:14\n\n### Later\ny\n2026-11-14 09:14\n\n'
+        )
+
+    def test_missing_trailing_newline_is_added(self, vault_path, clock):
+        entry = self._entry(vault_path, b'\n\n# Daily Notes\n### Edited\nby hand')
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### Note\nx', self.DAY)
+        assert entry.read_bytes() == b'\n\n# Daily Notes\n### Edited\nby hand\n### Note\nx\n2026-11-14 09:14\n\n'
+
+    def test_existing_heading_with_crlf_is_found(self, vault_path, clock):
+        entry = self._entry(vault_path, b'# Daily Notes\r\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### Note\nx', self.DAY)
+        assert entry.read_bytes() == b'# Daily Notes\r\n### Note\nx\n2026-11-14 09:14\n\n'
+
+    def test_level_two_daily_notes_is_not_the_section(self, vault_path, clock):
+        entry = self._entry(vault_path, b'## Daily Notes\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### Note\nx', self.DAY)
+        assert entry.read_bytes() == b'## Daily Notes\n\n# Daily Notes\n### Note\nx\n2026-11-14 09:14\n\n'
+
+    def test_note_defaults_to_today(self, vault_path, clock):
+        with VaultClient(str(vault_path)) as vault:
+            result = vault.add_note_to_journal('### Note\nx')
+            assert result['path'] == 'journal/2026/11/2026-11-14.md'

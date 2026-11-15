@@ -95,37 +95,23 @@ read or write any file in the vault
 **example usage in claude:**
 > "read the architecture.md file in my home automation project"
 
-#### get_current_timestamp
+#### get_todays_date
 
-get the current local date and time (using `TZ`) in every common format:
+get today's date and the current time in your timezone (`TZ`):
 
 ```json
 {
-  "iso": "2026-11-08T14:32:05-05:00",
-  "utc": "2026-11-08T19:32:05Z",
-  "unix": 1794166325,
-  "date": "2026-11-08",
-  "time": "14:32:05",
-  "time_12h": "2:32 PM",
-  "day_of_week": "Sunday",
-  "human_date": "Sunday November 8, 2026",
-  "human": "Sunday November 8, 2026 at 2:32 PM",
-  "iso_week": "2026-W45",
-  "timezone": "America/New_York",
-  "utc_offset": "-05:00"
+  "date": "2026-11-14",
+  "time": "14:32",
+  "day_of_week": "Saturday",
+  "timezone": "America/New_York"
 }
 ```
 
+`date` is the format the journal tools take. claude is told to call this before touching the journal instead of guessing the date, and to check the time: after midnight you may still mean the previous day
+
 **example usage in claude:**
 > "what's today's date?"
-> "what time is it?"
-
-#### list_todays_journal_entry
-
-get the path for today's journal entry (e.g., `journal/2025/01/2025-01-15.md`)
-
-**example usage in claude:**
-> "what's my journal path for today?"
 
 #### list_journal_entries_by_year_and_month
 
@@ -140,7 +126,7 @@ list all journal entries for a specific month
 
 #### read_journal_entry
 
-read the journal entry for a date; returns `exists: false` and empty content when there is no entry
+read the journal entry for a date; returns its `path`, `exists: false` and empty content when there is no entry
 
 **parameters:**
 - `date` (required): date in YYYY-MM-DD format
@@ -148,46 +134,62 @@ read the journal entry for a date; returns `exists: false` and empty content whe
 **example usage in claude:**
 > "what did i write in my journal on october 3rd?"
 
-#### journal entry format
+#### journal format
 
-a day's file holds one or more entries. each entry starts with a `###` heading naming it, and uses `####` and `#####` headings to organize within it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions and repeated in the journal tool descriptions
-
-before touching a journal entry, claude is told to call `get_current_timestamp` instead of guessing the date, to confirm the date when you are writing after midnight or catching up on an earlier day, and to use the time of day for ordering without writing timestamps into entries
+a day's file has a `# Daily Notes` section that notes are added to through the day, each stamped with the time it was added. other top-level sections, such as a daily recap, go above it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions
 
 ```markdown
-### Morning run and MCP refactor
 
+
+# Daily Recap
+a good, busy day...
+
+# Daily Notes
+### Morning run
 first-person narrative...
+2026-11-14 07:50
 
+### obsidian-mcp refactor
 #### Work
-
-##### obsidian-mcp
 ...
-
 #### Notes
 - links, commands, snippets, todos
+2026-11-14 15:40
 
-### Evening reading
-...
 ```
+
+a new file starts as two blank lines and `# Daily Notes`. the file is always written with `\n` line endings, on mac and windows alike
+
+#### add_note_to_journal_entry
+
+add a note to the `# Daily Notes` section, the usual way to write to the journal. the note starts with a `###` heading naming its topic, then the note on the next line, organized with `####` and `#####` if it's long; `#` and `##` headings are rejected (outside code blocks). the tool:
+
+- creates the file as `\n\n# Daily Notes\n` if it's missing or empty, or appends `# Daily Notes` to a file that doesn't have it
+- trims the note, then appends it followed by a newline, the timestamp (`YYYY-MM-DD HH:MM`, 24-hour), and two newlines
+- stamps the current time even when `date` is an earlier day, so a note written at 00:45 for yesterday shows when it was really written
+
+**parameters:**
+- `text` (required): the note, starting with a `###` heading
+- `date` (optional): date in YYYY-MM-DD format, defaults to today
+
+**example usage in claude:**
+> "add a note: the new trail by the river is great for running"
+> "it's 1am but i haven't slept, add a note to today about the deploy" (claude confirms and passes yesterday's date)
 
 #### write_journal_entry / append_to_journal_entry / prepend_to_journal_entry
 
-three ways to edit a journal file, each creating the file if needed:
+lower-level ways to edit a journal file, each creating the file if needed:
 
-- **write_journal_entry**: replace the whole file (read it first, used for editing or reorganizing existing entries)
-- **append_to_journal_entry**: add text to the end, separated by a blank line. existing content is never rewritten
-- **prepend_to_journal_entry**: add text to the top, after any yaml frontmatter. the rest of the file is kept unchanged
-
-append and prepend keep the file's line endings (lf or crlf)
+- **write_journal_entry**: replace the whole file (read it first, used for editing or reorganizing existing content)
+- **append_to_journal_entry**: write text at the end of the file exactly as given, with nothing added or trimmed. existing content is never rewritten
+- **prepend_to_journal_entry**: write text at the top of the file exactly as given, right after any yaml frontmatter, with nothing added or trimmed. used for sections above the notes, such as a recap; end the text with a blank line to separate it
 
 **parameters:**
 - `content` / `text` (required): markdown to write, append, or prepend
 - `date` (optional): date in YYYY-MM-DD format, defaults to today
 
 **example usage in claude:**
-> "add to my journal: the new trail by the river is great for running"
-> "add an entry to the top of yesterday's journal about the dentist visit"
+> "add a daily recap to the top of today's journal"
 
 #### list_projects / list_project_content / create_project
 

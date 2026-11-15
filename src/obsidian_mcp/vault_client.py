@@ -11,12 +11,17 @@ import re
 import zoneinfo
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # yaml frontmatter: a --- line at the very start, closed by the next --- (or ...) line
 _FRONTMATTER = re.compile(r'\A---[ \t]*\r?\n(?:.*?\r?\n)??(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)', re.DOTALL)
+
+# the section notes are added to through the day, and the file a day's notes start from
+DAILY_NOTES_HEADING = '# Daily Notes'
+DAILY_NOTES_SKELETON = f'\n\n{DAILY_NOTES_HEADING}\n'
+_DAILY_NOTES = re.compile(r'^# Daily Notes[ \t]*\r?$', re.MULTILINE)
 
 
 class VaultError(Exception):
@@ -148,7 +153,8 @@ class VaultClient:
 
         try:
             vault_path.parent.mkdir(parents=True, exist_ok=True)
-            vault_path.write_text(content, encoding='utf-8')
+            # newline='' writes \n as is; windows text mode would turn it into crlf
+            vault_path.write_text(content, encoding='utf-8', newline='')
             logger.info(f'wrote file: {file_path} ({len(content)} chars)')
         except Exception as e:
             logger.error(f'failed to write file: {file_path}: {e}')
@@ -330,12 +336,27 @@ class VaultClient:
             return {'path': journal_path, 'exists': False, 'content': ''}
         return {'path': journal_path, 'exists': True, 'content': self.read_file(journal_path)}
 
+    def _journal_file(self, date: Optional[datetime]) -> Tuple[str, Path]:
+        '''The vault-relative and full path of a journal entry.'''
+        journal_path = self.get_journal_path(date)
+        return journal_path, self._validate_path(journal_path)
+
+    def _read_journal_text(self, journal_path: str, full_path: Path) -> str:
+        '''A journal file's exact text, line endings included, or '' if it doesn't exist.'''
+        if not full_path.exists():
+            return ''
+        try:
+            with open(full_path, 'r', encoding='utf-8', newline='') as f:
+                return f.read()
+        except UnicodeDecodeError:
+            raise VaultError('Cannot read binary file', journal_path)
+
     def append_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
-        Append text as a new paragraph at the end of a journal entry, creating it if needed.
+        Append text to the end of a journal entry exactly as given, creating it if needed.
 
-        The file is opened in append mode, so existing content is never rewritten and
-        keeps its line endings.
+        Nothing is added, trimmed or converted: no separator, no trailing newline, no
+        line ending translation. Existing content is never rewritten.
 
         Args:
             text: Text to append
@@ -347,28 +368,13 @@ class VaultClient:
         Raises:
             VaultError: If the append fails
         '''
-        journal_path = self.get_journal_path(date)
-        full_path = self._validate_path(journal_path)
+        journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            existing = b'' if created else full_path.read_bytes()
-            newline = '\r\n' if b'\r\n' in existing else '\n'
-
-            # separate the new paragraph from existing content with one blank line
-            if not existing.strip():
-                lead = ''
-            elif existing.endswith(newline.encode() * 2):
-                lead = ''
-            elif existing.endswith(b'\n'):
-                lead = newline
-            else:
-                lead = newline * 2
-
-            body = text.replace('\r\n', '\n').replace('\n', newline)
             with open(full_path, 'a', encoding='utf-8', newline='') as f:
-                f.write(lead + body + newline)
+                f.write(text)
             logger.info(f'appended to journal: {journal_path} ({len(text)} chars, created={created})')
         except OSError as e:
             logger.error(f'failed to append to journal: {journal_path}: {e}')
@@ -378,11 +384,12 @@ class VaultClient:
 
     def prepend_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
-        Insert text as a new block at the top of a journal entry, creating it if needed.
+        Insert text at the top of a journal entry exactly as given, creating it if needed.
 
         YAML frontmatter (a --- block on the first line, shown by Obsidian as properties)
-        stays first and the text goes right after it. Existing content is otherwise kept
-        byte for byte, including its line endings.
+        stays first and the text goes right after its closing --- line. Nothing else is
+        added, trimmed or converted; the one exception is a newline after a closing ---
+        that ends the file, so the text doesn't join the frontmatter.
 
         Args:
             text: Text to prepend
@@ -394,43 +401,80 @@ class VaultClient:
         Raises:
             VaultError: If the prepend fails
         '''
-        journal_path = self.get_journal_path(date)
-        full_path = self._validate_path(journal_path)
+        journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            if created:
-                existing = ''
-            else:
-                with open(full_path, 'r', encoding='utf-8', newline='') as f:
-                    existing = f.read()
-            newline = '\r\n' if '\r\n' in existing else '\n'
+            existing = self._read_journal_text(journal_path, full_path)
 
             match = _FRONTMATTER.match(existing)
             frontmatter = match.group(0) if match else ''
             rest = existing[len(frontmatter):]
             if frontmatter and not frontmatter.endswith('\n'):
-                frontmatter += newline
-
-            # one blank line after frontmatter and between the new block and old content
-            body = text.replace('\r\n', '\n').replace('\n', newline)
-            parts = [frontmatter + newline] if frontmatter else []
-            parts.append(body + newline)
-            rest = rest.lstrip('\r\n')
-            if rest.strip():
-                parts.append(newline + rest)
+                frontmatter += '\n'
 
             with open(full_path, 'w', encoding='utf-8', newline='') as f:
-                f.write(''.join(parts))
+                f.write(frontmatter + text + rest)
             logger.info(f'prepended to journal: {journal_path} ({len(text)} chars, created={created})')
-        except UnicodeDecodeError:
-            raise VaultError('Cannot read binary file', journal_path)
         except OSError as e:
             logger.error(f'failed to prepend to journal: {journal_path}: {e}')
             raise VaultError(f'Failed to prepend to journal: {e}', journal_path)
 
         return {'path': journal_path, 'created': created}
+
+    def add_note_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
+        '''
+        Append a note to the Daily Notes section of a journal entry, stamped with the time.
+
+        A missing, empty or whitespace-only file becomes the daily notes skeleton first.
+        A file without a # Daily Notes line gets one appended, after a blank line. A file
+        that doesn't end in a newline gets one, so the note starts on its own line. The
+        note is then appended as: text, newline, YYYY-MM-DD HH:MM, two newlines. The
+        timestamp is always the current local time, even when date is an earlier day.
+
+        Args:
+            text: The note, starting with a ### heading, with no trailing newline
+            date: Date of the journal entry. Defaults to today.
+
+        Returns:
+            Dictionary with the entry path, whether the file was created, and the timestamp
+
+        Raises:
+            VaultError: If the write fails
+        '''
+        journal_path, full_path = self._journal_file(date)
+        created = not full_path.exists()
+        timestamp = self.get_local_datetime().strftime('%Y-%m-%d %H:%M')
+        note = f'{text}\n{timestamp}\n\n'
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            existing = self._read_journal_text(journal_path, full_path)
+
+            if not existing.strip():
+                mode, lead = 'w', DAILY_NOTES_SKELETON
+            elif not _DAILY_NOTES.search(existing):
+                if existing.endswith('\n\n'):
+                    gap = ''
+                elif existing.endswith('\n'):
+                    gap = '\n'
+                else:
+                    gap = '\n\n'
+                mode, lead = 'a', f'{gap}{DAILY_NOTES_HEADING}\n'
+            elif not existing.endswith('\n'):
+                mode, lead = 'a', '\n'
+            else:
+                mode, lead = 'a', ''
+
+            with open(full_path, mode, encoding='utf-8', newline='') as f:
+                f.write(lead + note)
+            logger.info(f'added note to journal: {journal_path} ({len(text)} chars, created={created})')
+        except OSError as e:
+            logger.error(f'failed to add note to journal: {journal_path}: {e}')
+            raise VaultError(f'Failed to add note to journal: {e}', journal_path)
+
+        return {'path': journal_path, 'created': created, 'timestamp': timestamp}
 
     def write_journal_entry(self, content: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
