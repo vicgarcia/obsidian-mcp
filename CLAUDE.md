@@ -105,6 +105,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - Consistent error handling patterns: `{"error": "message", "success": False}`
 - Structured logging with configurable levels (all lowercase except proper names)
 - Path security validation (no traversal attacks)
+- Responses never reveal where the vault lives: errors name vault-relative paths and an OSError's reason (`strerror`), not its text, and every server error goes through `error_response`, which redacts the vault root as a backstop. Full detail goes to the log only
 - Context manager pattern for resource management
 
 ### Entry Point Flow

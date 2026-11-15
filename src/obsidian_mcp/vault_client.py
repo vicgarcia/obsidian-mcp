@@ -24,6 +24,16 @@ DAILY_NOTES_SKELETON = f'\n\n{DAILY_NOTES_HEADING}\n'
 _DAILY_NOTES = re.compile(r'^# Daily Notes[ \t]*\r?$', re.MULTILINE)
 
 
+def _reason(error: Exception) -> str:
+    '''
+    Why an operation failed, without the file name.
+
+    An OSError's text includes the absolute path (Permission denied: 'C:\\...'), so only
+    its strerror goes into a VaultError; the full error is logged instead.
+    '''
+    return getattr(error, 'strerror', None) or type(error).__name__
+
+
 class VaultError(Exception):
     '''Exception raised for vault operation errors.'''
 
@@ -61,9 +71,11 @@ class VaultClient:
     def __enter__(self) -> 'VaultClient':
         '''Enter context manager.'''
         if not self._vault_path.exists():
-            raise VaultError('Vault directory does not exist', str(self._vault_path))
+            logger.error(f'vault directory does not exist: {self._vault_path}')
+            raise VaultError('Vault directory does not exist')
         if not self._vault_path.is_dir():
-            raise VaultError('Vault path is not a directory', str(self._vault_path))
+            logger.error(f'vault path is not a directory: {self._vault_path}')
+            raise VaultError('Vault path is not a directory')
         logger.debug('vault client context entered')
         return self
 
@@ -158,7 +170,7 @@ class VaultClient:
             logger.info(f'wrote file: {file_path} ({len(content)} chars)')
         except Exception as e:
             logger.error(f'failed to write file: {file_path}: {e}')
-            raise VaultError(f'Failed to write file: {e}', file_path)
+            raise VaultError(f'Failed to write file: {_reason(e)}', file_path)
 
     def file_exists(self, file_path: str) -> bool:
         '''Check if a file exists in the vault.'''
@@ -247,7 +259,7 @@ class VaultClient:
             logger.info(f'created directory: {directory}')
         except Exception as e:
             logger.error(f'failed to create directory: {directory}: {e}')
-            raise VaultError(f'Failed to create directory: {e}', directory)
+            raise VaultError(f'Failed to create directory: {_reason(e)}', directory)
 
     def directory_exists(self, directory: str) -> bool:
         '''Check if a directory exists in the vault.'''
@@ -378,7 +390,7 @@ class VaultClient:
             logger.info(f'appended to journal: {journal_path} ({len(text)} chars, created={created})')
         except OSError as e:
             logger.error(f'failed to append to journal: {journal_path}: {e}')
-            raise VaultError(f'Failed to append to journal: {e}', journal_path)
+            raise VaultError(f'Failed to append to journal: {_reason(e)}', journal_path)
 
         return {'path': journal_path, 'created': created}
 
@@ -419,7 +431,7 @@ class VaultClient:
             logger.info(f'prepended to journal: {journal_path} ({len(text)} chars, created={created})')
         except OSError as e:
             logger.error(f'failed to prepend to journal: {journal_path}: {e}')
-            raise VaultError(f'Failed to prepend to journal: {e}', journal_path)
+            raise VaultError(f'Failed to prepend to journal: {_reason(e)}', journal_path)
 
         return {'path': journal_path, 'created': created}
 
@@ -472,7 +484,7 @@ class VaultClient:
             logger.info(f'added note to journal: {journal_path} ({len(text)} chars, created={created})')
         except OSError as e:
             logger.error(f'failed to add note to journal: {journal_path}: {e}')
-            raise VaultError(f'Failed to add note to journal: {e}', journal_path)
+            raise VaultError(f'Failed to add note to journal: {_reason(e)}', journal_path)
 
         return {'path': journal_path, 'created': created, 'timestamp': timestamp}
 

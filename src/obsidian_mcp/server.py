@@ -8,6 +8,7 @@ file operations, journal management, project organization, and wiki articles.
 import argparse
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -66,9 +67,30 @@ def get_client() -> VaultClient:
     return _client
 
 
+def redact_vault_path(message: str) -> str:
+    '''
+    Replace the vault's absolute location in a message with <vault>.
+
+    Tools only ever speak in vault-relative paths; this is the backstop for any error
+    text (an exception message, a repr with doubled backslashes) that still holds it.
+    '''
+    if _client is None:
+        return message
+    root = str(_client.vault_path)
+    forms = {root, root.replace('\\', '\\\\'), root.replace('\\', '/')}
+    for form in sorted(forms, key=len, reverse=True):
+        message = re.sub(re.escape(form), '<vault>', message, flags=re.IGNORECASE)
+    return message
+
+
+def error_response(message: str) -> Dict[str, Any]:
+    '''An error response, with the vault's location removed.'''
+    return create_error_response(redact_vault_path(message))
+
+
 def format_error(error: Exception) -> Dict[str, Any]:
     '''Format an exception as an error response.'''
-    return create_error_response(str(error))
+    return error_response(str(error))
 
 
 # journal format guidance, sent to clients as the server instructions
@@ -133,13 +155,13 @@ def read_file(file_path: str) -> Dict[str, Any]:
 
     except ValidationError as e:
         logger.error(f'validation error reading file: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error reading file: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error reading file: {e}')
-        return create_error_response(f'Unexpected error reading file: {e}')
+        return error_response(f'Unexpected error reading file: {e}')
 
 
 @mcp.tool()
@@ -167,13 +189,13 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
 
     except ValidationError as e:
         logger.error(f'validation error writing file: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error writing file: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error writing file: {e}')
-        return create_error_response(f'Unexpected error writing file: {e}')
+        return error_response(f'Unexpected error writing file: {e}')
 
 
 # date tools
@@ -209,7 +231,7 @@ def get_todays_date() -> Dict[str, Any]:
         return result
     except Exception as e:
         logger.exception(f"unexpected error getting today's date: {e}")
-        return create_error_response(f"Unexpected error getting today's date: {e}")
+        return error_response(f"Unexpected error getting today's date: {e}")
 
 
 # journal tools
@@ -237,13 +259,13 @@ def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[s
 
     except ValidationError as e:
         logger.error(f'validation error listing journal entries: {e}')
-        return [create_error_response(f'Invalid input: {e}')]
+        return [error_response(f'Invalid input: {e}')]
     except VaultError as e:
         logger.error(f'vault error listing journal entries: {e}')
         return [format_error(e)]
     except Exception as e:
         logger.exception(f'unexpected error listing journal entries: {e}')
-        return [create_error_response(f'Unexpected error listing journal entries: {e}')]
+        return [error_response(f'Unexpected error listing journal entries: {e}')]
 
 
 @mcp.tool()
@@ -267,13 +289,13 @@ def read_journal_entry(date: str) -> Dict[str, Any]:
 
     except ValidationError as e:
         logger.error(f'validation error reading journal entry: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error reading journal entry: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error reading journal entry: {e}')
-        return create_error_response(f'Unexpected error reading journal entry: {e}')
+        return error_response(f'Unexpected error reading journal entry: {e}')
 
 
 @mcp.tool()
@@ -302,13 +324,13 @@ def write_journal_entry(content: str, date: Optional[str] = None) -> Dict[str, A
 
     except ValidationError as e:
         logger.error(f'validation error writing journal entry: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error writing journal entry: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error writing journal entry: {e}')
-        return create_error_response(f'Unexpected error writing journal entry: {e}')
+        return error_response(f'Unexpected error writing journal entry: {e}')
 
 
 @mcp.tool()
@@ -337,13 +359,13 @@ def append_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, 
 
     except ValidationError as e:
         logger.error(f'validation error appending to journal: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error appending to journal: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error appending to journal: {e}')
-        return create_error_response(f'Unexpected error appending to journal: {e}')
+        return error_response(f'Unexpected error appending to journal: {e}')
 
 
 @mcp.tool()
@@ -373,13 +395,13 @@ def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str,
 
     except ValidationError as e:
         logger.error(f'validation error prepending to journal: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error prepending to journal: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error prepending to journal: {e}')
-        return create_error_response(f'Unexpected error prepending to journal: {e}')
+        return error_response(f'Unexpected error prepending to journal: {e}')
 
 
 @mcp.tool()
@@ -414,13 +436,13 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
 
     except ValidationError as e:
         logger.error(f'validation error adding note to journal: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error adding note to journal: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error adding note to journal: {e}')
-        return create_error_response(f'Unexpected error adding note to journal: {e}')
+        return error_response(f'Unexpected error adding note to journal: {e}')
 
 
 # project tools
@@ -446,7 +468,7 @@ def list_projects() -> List[Dict[str, str]]:
         return [format_error(e)]
     except Exception as e:
         logger.exception(f'unexpected error listing projects: {e}')
-        return [create_error_response(f'Unexpected error listing projects: {e}')]
+        return [error_response(f'Unexpected error listing projects: {e}')]
 
 
 @mcp.tool()
@@ -469,13 +491,13 @@ def list_project_content(project: str) -> List[Dict[str, str]]:
 
     except ValidationError as e:
         logger.error(f'validation error listing project content: {e}')
-        return [create_error_response(f'Invalid input: {e}')]
+        return [error_response(f'Invalid input: {e}')]
     except VaultError as e:
         logger.error(f'vault error listing project content: {e}')
         return [format_error(e)]
     except Exception as e:
         logger.exception(f'unexpected error listing project content: {e}')
-        return [create_error_response(f'Unexpected error listing project content: {e}')]
+        return [error_response(f'Unexpected error listing project content: {e}')]
 
 
 @mcp.tool()
@@ -499,13 +521,13 @@ def create_project(project: str) -> Dict[str, Any]:
 
     except ValidationError as e:
         logger.error(f'validation error creating project: {e}')
-        return create_error_response(f'Invalid input: {e}')
+        return error_response(f'Invalid input: {e}')
     except VaultError as e:
         logger.error(f'vault error creating project: {e}')
         return format_error(e)
     except Exception as e:
         logger.exception(f'unexpected error creating project: {e}')
-        return create_error_response(f'Unexpected error creating project: {e}')
+        return error_response(f'Unexpected error creating project: {e}')
 
 
 # wiki tools
@@ -531,7 +553,7 @@ def list_wiki() -> List[Dict[str, str]]:
         return [format_error(e)]
     except Exception as e:
         logger.exception(f'unexpected error listing wiki: {e}')
-        return [create_error_response(f'Unexpected error listing wiki: {e}')]
+        return [error_response(f'Unexpected error listing wiki: {e}')]
 
 
 # entry point

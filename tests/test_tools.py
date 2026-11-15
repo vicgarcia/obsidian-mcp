@@ -2,6 +2,9 @@
 Tests for MCP tools.
 '''
 
+import os
+import stat
+
 import pytest
 from datetime import datetime
 from pathlib import Path
@@ -341,3 +344,58 @@ class TestJournalEntryTools:
         for tool in ('add_note_to_journal_entry', 'write_journal_entry', 'append_to_journal_entry',
                      'prepend_to_journal_entry', 'read_journal_entry', 'get_todays_date'):
             assert tool in instructions
+
+
+class TestErrorsHideVaultPath:
+    '''Error responses use vault-relative paths and never reveal where the vault lives.'''
+
+    @pytest.fixture
+    def locked_entry(self, vault_path):
+        '''A read-only journal file, so every write to it fails with an OSError.'''
+        entry = vault_path / 'journal/2025/01/2025-01-15.md'
+        os.chmod(entry, stat.S_IREAD)
+        yield entry
+        os.chmod(entry, stat.S_IREAD | stat.S_IWRITE)
+
+    def _assert_hidden(self, result, vault_path):
+        assert result['success'] is False
+        text = repr(result).lower()
+        root = str(vault_path)
+        for form in {root, root.replace('\\', '/'), root.replace('\\', '\\\\')}:
+            assert form.lower() not in text
+
+    @pytest.mark.parametrize('call', [
+        lambda: server.append_to_journal_entry('x', date='2025-01-15'),
+        lambda: server.prepend_to_journal_entry('x', date='2025-01-15'),
+        lambda: server.add_note_to_journal_entry('### x\ny', date='2025-01-15'),
+        lambda: server.write_journal_entry('x', date='2025-01-15'),
+        lambda: server.write_file('journal/2025/01/2025-01-15.md', 'x'),
+    ])
+    def test_write_failures_name_only_the_relative_path(self, call, locked_entry, vault_path):
+        result = call()
+        self._assert_hidden(result, vault_path)
+        assert 'journal/2025/01/2025-01-15.md' in result['error']
+
+    def test_missing_vault_is_not_named(self, vault_path):
+        server._client = VaultClient(str(vault_path / 'gone'))
+        result = server.read_journal_entry('2025-01-15')
+        self._assert_hidden(result, vault_path)
+        assert result['error'] == 'Vault directory does not exist'
+
+    def test_path_outside_the_vault_is_reported_as_given(self, vault_path):
+        result = server.read_file('../outside.md')
+        self._assert_hidden(result, vault_path)
+
+    def test_redact_catches_every_form_of_the_vault_path(self, vault_path):
+        root = str(vault_path)
+        message = f"raw {root} repr {root.replace(chr(92), chr(92) * 2)} slashes {root.replace(chr(92), '/')} upper {root.upper()}"
+        redacted = server.redact_vault_path(message)
+        assert redacted == 'raw <vault> repr <vault> slashes <vault> upper <vault>'
+
+    def test_unexpected_errors_are_redacted(self, vault_path, monkeypatch):
+        def boom(self, year, month):
+            raise RuntimeError(f'could not list {vault_path}/journal')
+        monkeypatch.setattr(VaultClient, 'list_journal_entries', boom)
+        result = server.list_journal_entries_by_year_and_month('2025', '01')[0]
+        self._assert_hidden(result, vault_path)
+        assert '<vault>/journal' in result['error']
