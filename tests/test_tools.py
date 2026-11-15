@@ -82,9 +82,18 @@ class TestDateTools:
         monkeypatch.setenv('TZ', 'America/New_York')
         result = server.get_todays_date()
         assert set(result) == {'date', 'time', 'day_of_week', 'timezone'}
-        local = datetime.strptime(f"{result['date']} {result['time']}", '%Y-%m-%d %H:%M')
+        local = datetime.strptime(f"{result['date']} {result['time']}", '%Y-%m-%d %I:%M %p')
         assert local.strftime('%A') == result['day_of_week']
         assert result['timezone'] == 'America/New_York'
+
+    @pytest.mark.parametrize('hour, minute, expected', [
+        (0, 0, '12:00 AM'), (0, 30, '12:30 AM'), (9, 5, '9:05 AM'), (11, 59, '11:59 AM'),
+        (12, 0, '12:00 PM'), (13, 7, '1:07 PM'), (23, 59, '11:59 PM'),
+    ])
+    def test_get_todays_date_12_hour_time(self, monkeypatch, hour, minute, expected):
+        now = datetime(2026, 11, 14, hour, minute, tzinfo=ZoneInfo('America/New_York'))
+        monkeypatch.setattr(VaultClient, 'get_local_datetime', lambda self: now)
+        assert server.get_todays_date()['time'] == expected
 
     def test_get_todays_date_fixed_moment(self, monkeypatch):
         '''A fixed moment formats as 24-hour time with no seconds.'''
@@ -93,7 +102,7 @@ class TestDateTools:
         monkeypatch.setenv('TZ', 'America/New_York')
         assert server.get_todays_date() == {
             'date': '2026-11-14',
-            'time': '09:05',
+            'time': '9:05 AM',
             'day_of_week': 'Saturday',
             'timezone': 'America/New_York',
         }

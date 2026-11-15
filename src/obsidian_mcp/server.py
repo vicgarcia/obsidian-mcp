@@ -213,7 +213,7 @@ def get_todays_date() -> Dict[str, Any]:
     Returns:
         Dictionary with:
             date: YYYY-MM-DD, the format journal tools take (2026-11-14)
-            time: 24-hour HH:MM (14:32)
+            time: 12-hour time with AM or PM (2:32 PM)
             day_of_week: weekday name (Saturday)
             timezone: timezone name (America/New_York)
     '''
@@ -223,7 +223,8 @@ def get_todays_date() -> Dict[str, Any]:
             now = vault.get_local_datetime()
         result = {
             'date': now.strftime('%Y-%m-%d'),
-            'time': now.strftime('%H:%M'),
+            # built by hand: %p follows the system locale, which may not say AM/PM
+            'time': f"{now.hour % 12 or 12}:{now.minute:02d} {'AM' if now.hour < 12 else 'PM'}",
             'day_of_week': now.strftime('%A'),
             'timezone': os.getenv('TZ') or now.tzname() or '',
         }

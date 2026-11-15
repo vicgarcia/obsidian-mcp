@@ -104,7 +104,7 @@ get today's date and the current time in your timezone (`TZ`):
 ```json
 {
   "date": "2026-11-14",
-  "time": "14:32",
+  "time": "2:32 PM",
   "day_of_week": "Saturday",
   "timezone": "America/New_York"
 }
