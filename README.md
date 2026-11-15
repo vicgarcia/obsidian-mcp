@@ -41,7 +41,7 @@ vault/
 - **projects**: directories for ongoing work with related docs
 - **wiki**: standalone articles on specific topics (flat structure)
 
-#### option 1: install with uv
+#### install with uv
 
 ```bash
 uv tool install git+https://github.com/vicgarcia/obsidian-mcp
@@ -55,24 +55,6 @@ claude desktop config:
     "obsidian": {
       "command": "obsidian-mcp",
       "args": ["--vault", "/path/to/your/vault"]
-    }
-  }
-}
-```
-
-#### option 2: docker
-
-```json
-{
-  "mcpServers": {
-    "obsidian": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-v", "/path/to/your/vault:/vault",
-        "-e", "TZ=America/New_York",
-        "ghcr.io/vicgarcia/obsidian-mcp:latest"
-      ]
     }
   }
 }
@@ -251,14 +233,5 @@ obsidian-mcp/
 │   ├── test_tools.py
 │   └── test_integration.py
 ├── pyproject.toml
-├── Dockerfile
 └── README.md
 ```
-
-#### building docker image locally
-
-```bash
-docker build -t obsidian-mcp:local .
-```
-
-to use the local build in claude desktop, update your mcp settings to use `obsidian-mcp:local` instead of `ghcr.io/vicgarcia/obsidian-mcp:latest`.

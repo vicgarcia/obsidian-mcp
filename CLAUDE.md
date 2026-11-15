@@ -3,7 +3,7 @@
 ## Project Overview
 Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 13 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
 
-Installable via `uv tool install`.
+Installed via `uv tool install` only (no Docker).
 
 ## Project Structure
 ```
@@ -21,7 +21,6 @@ obsidian-mcp/
 │   ├── test_tools.py         # MCP tool tests
 │   └── test_integration.py   # integration tests
 ├── pyproject.toml            # package metadata and dependencies
-├── Dockerfile                # docker deployment
 ├── README.md                 # user-facing documentation
 └── CLAUDE.md                 # this file
 ```
@@ -38,7 +37,6 @@ obsidian-mcp/
 ```bash
 uv tool install --editable .              # install in dev mode
 obsidian-mcp --vault /path/to/vault       # run
-docker build -t obsidian-mcp:local .      # build docker image
 uv run pytest tests/ -v                   # run tests
 ```
 
@@ -48,7 +46,7 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 ```
 
 ### Environment Variables
-- `OBSIDIAN_VAULT_PATH`: Path to vault (default: /vault, or use --vault flag)
+- `OBSIDIAN_VAULT_PATH`: Path to vault (or use --vault flag)
 - `TZ`: Timezone for journal dates (e.g., America/New_York)
 - `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
@@ -73,7 +71,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - **Schema module**: Centralized Pydantic validation models
 - **MCP FastMCP**: Used for MCP server framework (simpler than raw MCP protocol)
 - **STDIO Transport**: Default for Claude Desktop compatibility
-- **Dual deployment**: `uv tool install` for native, Docker for isolation
+- **Single deployment**: `uv tool install` only
 
 ### Module Organization
 
@@ -124,7 +122,7 @@ run()
 - **Modular architecture**: 3 core modules with clear responsibilities
 - **13 tools**: Covering three workflows (files/journal, projects, wiki)
 - **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`
-- **Dual deployment**: uv tool install + Docker
+- **Single deployment**: uv tool install
 - **Path validation**: Security-first file operations
 - **Comprehensive test suite**: Tests generated on the fly
 
