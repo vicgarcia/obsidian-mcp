@@ -26,14 +26,14 @@ def test_stdio_startup(vault_path):
                 await session.initialize()
                 tools = await session.list_tools()
                 assert {tool.name for tool in tools.tools} == {
-                    'read_file', 'write_file', 'get_current_timestamp',
-                    'list_todays_journal_entry',
+                    'read_file', 'write_file', 'get_todays_date',
                     'list_journal_entries_by_year_and_month', 'read_journal_entry',
                     'write_journal_entry', 'append_to_journal_entry',
-                    'prepend_to_journal_entry', 'list_projects',
+                    'prepend_to_journal_entry', 'add_note_to_journal_entry',
+                    'list_projects',
                     'list_project_content', 'create_project', 'list_wiki',
                 }
-                result = await session.call_tool('get_current_timestamp', {})
+                result = await session.call_tool('get_todays_date', {})
                 assert result.isError is False
                 assert result.content
 

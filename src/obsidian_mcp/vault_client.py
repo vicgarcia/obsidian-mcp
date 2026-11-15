@@ -10,13 +10,34 @@ import os
 import re
 import zoneinfo
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from pathlib import Path, PurePosixPath
+from typing import Any, Dict, List, Optional, Tuple
+
+from obsidian_mcp.schema import validate_vault_path
 
 logger = logging.getLogger(__name__)
 
 # yaml frontmatter: a --- line at the very start, closed by the next --- (or ...) line
 _FRONTMATTER = re.compile(r'\A---[ \t]*\r?\n(?:.*?\r?\n)??(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)', re.DOTALL)
+
+# the section notes are added to through the day. it is written lowercase, after two blank
+# lines, and found in any case so a file with an older # Daily Notes doesn't get a second one
+DAILY_NOTES_HEADING = '# daily notes'
+_DAILY_NOTES = re.compile(r'^# daily notes[ \t]*\r?$', re.MULTILINE | re.IGNORECASE)
+
+def _trailing_newlines(text: str) -> int:
+    '''How many line breaks the text ends with (\n or \r\n).'''
+    return text[len(text.rstrip('\r\n')):].count('\n')
+
+
+def _reason(error: Exception) -> str:
+    '''
+    Why an operation failed, without the file name.
+
+    An OSError's text includes the absolute path (Permission denied: 'C:\\...'), so only
+    its strerror goes into a VaultError; the full error is logged instead.
+    '''
+    return getattr(error, 'strerror', None) or type(error).__name__
 
 
 class VaultError(Exception):
@@ -56,9 +77,11 @@ class VaultClient:
     def __enter__(self) -> 'VaultClient':
         '''Enter context manager.'''
         if not self._vault_path.exists():
-            raise VaultError('Vault directory does not exist', str(self._vault_path))
+            logger.error(f'vault directory does not exist: {self._vault_path}')
+            raise VaultError('Vault directory does not exist')
         if not self._vault_path.is_dir():
-            raise VaultError('Vault path is not a directory', str(self._vault_path))
+            logger.error(f'vault path is not a directory: {self._vault_path}')
+            raise VaultError('Vault path is not a directory')
         logger.debug('vault client context entered')
         return self
 
@@ -75,6 +98,11 @@ class VaultClient:
         '''
         Validate and resolve a vault-relative path.
 
+        Two checks, the same on every platform. The text must be a portable vault-relative
+        path (validate_vault_path: no absolute, drive or UNC paths, no .., no names Windows
+        can't hold). Then the path is fully resolved, following symlinks and junctions, and
+        must still be inside the vault. The resolved path is what callers then open.
+
         Args:
             file_path: Vault-relative file path
 
@@ -82,9 +110,14 @@ class VaultClient:
             Resolved absolute Path
 
         Raises:
-            VaultError: If path is outside vault directory
+            VaultError: If the path is invalid or outside vault directory
         '''
-        full_path = self._vault_path / Path(file_path)
+        try:
+            relative = validate_vault_path(file_path)
+        except ValueError as e:
+            logger.warning(f'invalid path blocked: {file_path!r}: {e}')
+            raise VaultError(f'Invalid path: {e}', file_path)
+        full_path = self._vault_path / PurePosixPath(relative)
         if not full_path.resolve().is_relative_to(self._vault_path):
             logger.warning(f'path traversal attempt blocked: {file_path}')
             raise VaultError('Path is outside vault directory', file_path)
@@ -148,11 +181,12 @@ class VaultClient:
 
         try:
             vault_path.parent.mkdir(parents=True, exist_ok=True)
-            vault_path.write_text(content, encoding='utf-8')
+            # newline='' writes \n as is; windows text mode would turn it into crlf
+            vault_path.write_text(content, encoding='utf-8', newline='')
             logger.info(f'wrote file: {file_path} ({len(content)} chars)')
         except Exception as e:
             logger.error(f'failed to write file: {file_path}: {e}')
-            raise VaultError(f'Failed to write file: {e}', file_path)
+            raise VaultError(f'Failed to write file: {_reason(e)}', file_path)
 
     def file_exists(self, file_path: str) -> bool:
         '''Check if a file exists in the vault.'''
@@ -241,7 +275,7 @@ class VaultClient:
             logger.info(f'created directory: {directory}')
         except Exception as e:
             logger.error(f'failed to create directory: {directory}: {e}')
-            raise VaultError(f'Failed to create directory: {e}', directory)
+            raise VaultError(f'Failed to create directory: {_reason(e)}', directory)
 
     def directory_exists(self, directory: str) -> bool:
         '''Check if a directory exists in the vault.'''
@@ -330,12 +364,27 @@ class VaultClient:
             return {'path': journal_path, 'exists': False, 'content': ''}
         return {'path': journal_path, 'exists': True, 'content': self.read_file(journal_path)}
 
+    def _journal_file(self, date: Optional[datetime]) -> Tuple[str, Path]:
+        '''The vault-relative and full path of a journal entry.'''
+        journal_path = self.get_journal_path(date)
+        return journal_path, self._validate_path(journal_path)
+
+    def _read_journal_text(self, journal_path: str, full_path: Path) -> str:
+        '''A journal file's exact text, line endings included, or '' if it doesn't exist.'''
+        if not full_path.exists():
+            return ''
+        try:
+            with open(full_path, 'r', encoding='utf-8', newline='') as f:
+                return f.read()
+        except UnicodeDecodeError:
+            raise VaultError('Cannot read binary file', journal_path)
+
     def append_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
-        Append text as a new paragraph at the end of a journal entry, creating it if needed.
+        Append text to the end of a journal entry exactly as given, creating it if needed.
 
-        The file is opened in append mode, so existing content is never rewritten and
-        keeps its line endings.
+        Nothing is added, trimmed or converted: no separator, no trailing newline, no
+        line ending translation. Existing content is never rewritten.
 
         Args:
             text: Text to append
@@ -347,42 +396,28 @@ class VaultClient:
         Raises:
             VaultError: If the append fails
         '''
-        journal_path = self.get_journal_path(date)
-        full_path = self._validate_path(journal_path)
+        journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            existing = b'' if created else full_path.read_bytes()
-            newline = '\r\n' if b'\r\n' in existing else '\n'
-
-            # separate the new paragraph from existing content with one blank line
-            if not existing.strip():
-                lead = ''
-            elif existing.endswith(newline.encode() * 2):
-                lead = ''
-            elif existing.endswith(b'\n'):
-                lead = newline
-            else:
-                lead = newline * 2
-
-            body = text.replace('\r\n', '\n').replace('\n', newline)
             with open(full_path, 'a', encoding='utf-8', newline='') as f:
-                f.write(lead + body + newline)
+                f.write(text)
             logger.info(f'appended to journal: {journal_path} ({len(text)} chars, created={created})')
         except OSError as e:
             logger.error(f'failed to append to journal: {journal_path}: {e}')
-            raise VaultError(f'Failed to append to journal: {e}', journal_path)
+            raise VaultError(f'Failed to append to journal: {_reason(e)}', journal_path)
 
         return {'path': journal_path, 'created': created}
 
     def prepend_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
-        Insert text as a new block at the top of a journal entry, creating it if needed.
+        Insert text at the top of a journal entry exactly as given, creating it if needed.
 
         YAML frontmatter (a --- block on the first line, shown by Obsidian as properties)
-        stays first and the text goes right after it. Existing content is otherwise kept
-        byte for byte, including its line endings.
+        stays first and the text goes right after its closing --- line. Nothing else is
+        added, trimmed or converted; the one exception is a newline after a closing ---
+        that ends the file, so the text doesn't join the frontmatter.
 
         Args:
             text: Text to prepend
@@ -394,43 +429,81 @@ class VaultClient:
         Raises:
             VaultError: If the prepend fails
         '''
-        journal_path = self.get_journal_path(date)
-        full_path = self._validate_path(journal_path)
+        journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            if created:
-                existing = ''
-            else:
-                with open(full_path, 'r', encoding='utf-8', newline='') as f:
-                    existing = f.read()
-            newline = '\r\n' if '\r\n' in existing else '\n'
+            existing = self._read_journal_text(journal_path, full_path)
 
             match = _FRONTMATTER.match(existing)
             frontmatter = match.group(0) if match else ''
             rest = existing[len(frontmatter):]
             if frontmatter and not frontmatter.endswith('\n'):
-                frontmatter += newline
-
-            # one blank line after frontmatter and between the new block and old content
-            body = text.replace('\r\n', '\n').replace('\n', newline)
-            parts = [frontmatter + newline] if frontmatter else []
-            parts.append(body + newline)
-            rest = rest.lstrip('\r\n')
-            if rest.strip():
-                parts.append(newline + rest)
+                frontmatter += '\n'
 
             with open(full_path, 'w', encoding='utf-8', newline='') as f:
-                f.write(''.join(parts))
+                f.write(frontmatter + text + rest)
             logger.info(f'prepended to journal: {journal_path} ({len(text)} chars, created={created})')
-        except UnicodeDecodeError:
-            raise VaultError('Cannot read binary file', journal_path)
         except OSError as e:
             logger.error(f'failed to prepend to journal: {journal_path}: {e}')
-            raise VaultError(f'Failed to prepend to journal: {e}', journal_path)
+            raise VaultError(f'Failed to prepend to journal: {_reason(e)}', journal_path)
 
         return {'path': journal_path, 'created': created}
+
+    def add_note_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
+        '''
+        Append a note to the daily notes section of a journal entry, stamped with the time.
+
+        The section heading is the tool's job, never the agent's:
+        - a missing, empty or whitespace-only file becomes two blank lines, # daily notes
+          and a blank line
+        - a file with content but no # daily notes line (in any case) gets the heading
+          appended, two blank lines below the content, then a blank line
+        - a file with the heading gets whatever newlines make it end in one blank line
+
+        The note's content is written exactly as given, spacing included; the tool
+        description tells the agent the layout to use. Only the note's ends are trimmed
+        (by JournalNoteInput), so what follows it is always the same: a blank line,
+        YYYY-MM-DD HH:MM, a blank line. The timestamp is always the current local time,
+        even when date is an earlier day.
+
+        Args:
+            text: The note, starting with a ### heading
+            date: Date of the journal entry. Defaults to today.
+
+        Returns:
+            Dictionary with the entry path, whether the file was created, and the timestamp
+
+        Raises:
+            VaultError: If the write fails
+        '''
+        journal_path, full_path = self._journal_file(date)
+        created = not full_path.exists()
+        timestamp = self.get_local_datetime().strftime('%Y-%m-%d %H:%M')
+        note = f'{text}\n\n{timestamp}\n\n'
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            existing = self._read_journal_text(journal_path, full_path)
+            trailing = _trailing_newlines(existing)
+
+            if not existing.strip():
+                mode, lead = 'w', f'\n\n{DAILY_NOTES_HEADING}\n\n'
+            elif not _DAILY_NOTES.search(existing):
+                # three line breaks end the last line and leave two blank lines
+                mode, lead = 'a', '\n' * max(0, 3 - trailing) + f'{DAILY_NOTES_HEADING}\n\n'
+            else:
+                mode, lead = 'a', '\n' * max(0, 2 - trailing)
+
+            with open(full_path, mode, encoding='utf-8', newline='') as f:
+                f.write(lead + note)
+            logger.info(f'added note to journal: {journal_path} ({len(text)} chars, created={created})')
+        except OSError as e:
+            logger.error(f'failed to add note to journal: {journal_path}: {e}')
+            raise VaultError(f'Failed to add note to journal: {_reason(e)}', journal_path)
+
+        return {'path': journal_path, 'created': created, 'timestamp': timestamp}
 
     def write_journal_entry(self, content: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''

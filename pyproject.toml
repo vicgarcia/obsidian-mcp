@@ -1,6 +1,6 @@
 [project]
 name = "obsidian-mcp"
-version = "2.0.0"
+version = "3.0.0"
 description = "MCP server for accessing an opinionated Obsidian vault"
 authors = [
     { name = "vic Garcia", email = "vic.garcia@outlook.com" }

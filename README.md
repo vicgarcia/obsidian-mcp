@@ -88,44 +88,32 @@ this mcp server exposes 13 tools to interact with your obsidian vault.
 
 read or write any file in the vault
 
+paths are relative to the vault root and can't leave it, with the same rules on macos and windows: no absolute, drive or network paths, no `..`, and no names windows can't hold (`:` `?` `*` and the like, reserved names such as `nul.md`, a trailing dot or space). `\` works as a separator. links that point out of the vault are refused. errors never show where the vault is on disk
+
 **parameters:**
 - `file_path` (required): vault-relative path to the file
 - `content` (required for write): content to write
 
-**example usage in claude:**
+<sub>example usage with agent:</sub>
 > "read the architecture.md file in my home automation project"
 
-#### get_current_timestamp
+#### get_todays_date
 
-get the current local date and time (using `TZ`) in every common format:
+get today's date and the current time in your timezone (`TZ`):
 
 ```json
 {
-  "iso": "2026-11-08T14:32:05-05:00",
-  "utc": "2026-11-08T19:32:05Z",
-  "unix": 1794166325,
-  "date": "2026-11-08",
-  "time": "14:32:05",
-  "time_12h": "2:32 PM",
-  "day_of_week": "Sunday",
-  "human_date": "Sunday November 8, 2026",
-  "human": "Sunday November 8, 2026 at 2:32 PM",
-  "iso_week": "2026-W45",
-  "timezone": "America/New_York",
-  "utc_offset": "-05:00"
+  "date": "2026-11-14",
+  "time": "2:32 PM",
+  "day_of_week": "Saturday",
+  "timezone": "America/New_York"
 }
 ```
 
-**example usage in claude:**
+`date` is the format the journal tools take. claude is told to call this before touching the journal instead of guessing the date, and to check the time: after midnight you may still mean the previous day
+
+<sub>example usage with agent:</sub>
 > "what's today's date?"
-> "what time is it?"
-
-#### list_todays_journal_entry
-
-get the path for today's journal entry (e.g., `journal/2025/01/2025-01-15.md`)
-
-**example usage in claude:**
-> "what's my journal path for today?"
 
 #### list_journal_entries_by_year_and_month
 
@@ -135,59 +123,82 @@ list all journal entries for a specific month
 - `year` (required): year in YYYY format
 - `month` (required): month in MM format (e.g., "01", "10")
 
-**example usage in claude:**
+<sub>example usage with agent:</sub>
 > "show me my journal entries from january 2025"
 
 #### read_journal_entry
 
-read the journal entry for a date; returns `exists: false` and empty content when there is no entry
+read the journal entry for a date; returns its `path`, `exists: false` and empty content when there is no entry
 
 **parameters:**
 - `date` (required): date in YYYY-MM-DD format
 
-**example usage in claude:**
+<sub>example usage with agent:</sub>
 > "what did i write in my journal on october 3rd?"
 
-#### journal entry format
+#### journal format
 
-a day's file holds one or more entries. each entry starts with a `###` heading naming it, and uses `####` and `#####` headings to organize within it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions and repeated in the journal tool descriptions
-
-before touching a journal entry, claude is told to call `get_current_timestamp` instead of guessing the date, to confirm the date when you are writing after midnight or catching up on an earlier day, and to use the time of day for ordering without writing timestamps into entries
+a day's file has a `# daily notes` section that notes are added to through the day, each stamped with the time it was added. other top-level sections, such as a daily recap, go above it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions
 
 ```markdown
-### Morning run and MCP refactor
+
+
+# daily notes
+
+### Morning run
 
 first-person narrative...
 
+2026-11-14 07:50
+
+### obsidian-mcp refactor
+
 #### Work
 
-##### obsidian-mcp
 ...
 
 #### Notes
+
 - links, commands, snippets, todos
 
-### Evening reading
-...
+2026-11-14 15:40
+
 ```
+
+the file is always written with `\n` line endings, on mac and windows alike
+
+#### add_note_to_journal_entry
+
+add a note to the `# daily notes` section, the usual way to write to the journal. the note starts with a `###` heading naming its topic, then the note, organized with `####` and `#####` if it's long; `#` and `##` headings are rejected (outside code blocks). the agent sends only the note; the tool handles the section heading and the timestamp:
+
+- a missing or empty file starts as two blank lines, `# daily notes` and a blank line
+- a file without the heading gets `# daily notes` appended two blank lines below its content. any case counts as the heading, so an older `# Daily Notes` isn't duplicated
+- the note's content is written exactly as the agent sends it, spacing included; only its ends are trimmed. the tool description gives the agent the layout to use: a blank line after every heading, and a blank line before every heading after the first
+- the note is appended followed by a blank line, the timestamp (`YYYY-MM-DD HH:MM`, 24-hour) and a blank line, so notes sit one blank line apart
+- the timestamp is the current time even when `date` is an earlier day, so a note written at 00:45 for yesterday shows when it was really written
+
+**parameters:**
+- `text` (required): the note, starting with a `###` heading
+- `date` (optional): date in YYYY-MM-DD format, defaults to today
+
+<sub>example usage with agent:</sub>
+> "add a note: the new trail by the river is great for running"
+> "it's 1am but i haven't slept, add a note to today about the deploy" (claude confirms and passes yesterday's date)
 
 #### write_journal_entry / append_to_journal_entry / prepend_to_journal_entry
 
-three ways to edit a journal file, each creating the file if needed:
+lower-level ways to edit a journal file, each creating the file if needed:
 
-- **write_journal_entry**: replace the whole file (read it first, used for editing or reorganizing existing entries)
-- **append_to_journal_entry**: add text to the end, separated by a blank line. existing content is never rewritten
-- **prepend_to_journal_entry**: add text to the top, after any yaml frontmatter. the rest of the file is kept unchanged
-
-append and prepend keep the file's line endings (lf or crlf)
+- **write_journal_entry**: replace the whole file (read it first, used for editing or reorganizing existing content)
+- **append_to_journal_entry**: write text at the end of the file exactly as given, with nothing added or trimmed. existing content is never rewritten
+- **prepend_to_journal_entry**: write text at the top of the file exactly as given, right after any yaml frontmatter, with nothing added or trimmed. used for sections above the notes, such as a recap; end the text with a blank line to separate it
 
 **parameters:**
 - `content` / `text` (required): markdown to write, append, or prepend
 - `date` (optional): date in YYYY-MM-DD format, defaults to today
 
-**example usage in claude:**
-> "add to my journal: the new trail by the river is great for running"
-> "add an entry to the top of yesterday's journal about the dentist visit"
+<sub>example usage with agent:</sub>
+> "add a daily recap to the top of today's journal"
 
 #### list_projects / list_project_content / create_project
 
@@ -196,7 +207,7 @@ manage project directories in your vault
 **parameters:**
 - `project` (required): name of the project directory
 
-**example usage in claude:**
+<sub>example usage with agent:</sub>
 > "list my projects"
 > "show me the files in my home automation project"
 > "create a new project called blog redesign"
@@ -205,7 +216,7 @@ manage project directories in your vault
 
 list all wiki articles in the wiki directory
 
-**example usage in claude:**
+<sub>example usage with agent:</sub>
 > "list my wiki articles"
 
 ## development

@@ -58,16 +58,61 @@ class JournalDateInput(BaseModel):
 
 
 class JournalTextInput(BaseModel):
-    '''Input validation for appending or prepending to a journal entry (date defaults to today).'''
+    '''
+    Input validation for appending or prepending to a journal entry (date defaults to today).
+
+    The text is kept exactly as given, whitespace and newlines included.
+    '''
     text: str
     date: Optional[str] = None
 
     @field_validator('text')
     @classmethod
     def validate_text(cls, v: str) -> str:
-        if not v or v.strip() == '':
+        if v == '':
             raise ValueError('Text cannot be empty')
-        return v.strip()
+        return v
+
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else _validate_journal_date(v)
+
+    def entry_date(self) -> Optional[datetime]:
+        '''The parsed entry date, or None for today.'''
+        return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
+
+
+# a code fence opener or closer, and a # or ## heading (up to 3 spaces of indent is still a heading)
+_FENCE = re.compile(r'^ {0,3}(```|~~~)')
+_TOP_HEADING = re.compile(r'^ {0,3}#{1,2}(?:[ \t]|$)')
+
+
+class JournalNoteInput(BaseModel):
+    '''
+    Input validation for adding a note to a journal entry's daily notes (date defaults to today).
+
+    The note is trimmed, must start with a ### heading, and can't hold # or ## headings
+    outside code blocks, which would break out of the # daily notes section.
+    '''
+    text: str
+    date: Optional[str] = None
+
+    @field_validator('text')
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Note cannot be empty')
+        if not v.startswith('### '):
+            raise ValueError('Note must start with a ### heading')
+        fenced = False
+        for line in v.splitlines():
+            if _FENCE.match(line):
+                fenced = not fenced
+            elif not fenced and _TOP_HEADING.match(line):
+                raise ValueError('Note cannot contain # or ## headings, use #### and ##### within it')
+        return v
 
     @field_validator('date')
     @classmethod
@@ -101,6 +146,54 @@ class JournalWriteInput(BaseModel):
         return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
 
 
+# names windows treats as devices, with or without an extension (nul.md is nul), any case;
+# the superscript digits count too
+_RESERVED_NAMES = re.compile(r'^(con|prn|aux|nul|conin\$|conout\$|(com|lpt)[0-9¹²³])$', re.IGNORECASE)
+# characters windows doesn't allow in a name, and control characters (a nul byte included)
+_BAD_NAME_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
+
+
+def check_name(name: str, what: str = 'Path') -> None:
+    '''
+    Reject a file or folder name that is unsafe or unportable on any platform.
+
+    The vault syncs between macOS and Windows, so names Windows can't hold are refused on
+    both: reserved device names, characters like : and ?, and a trailing dot or space,
+    which Windows silently drops (x.md. would name x.md).
+    '''
+    if _BAD_NAME_CHARS.search(name):
+        raise ValueError(f'{what} cannot contain < > : " | ? * or control characters')
+    if _RESERVED_NAMES.match(name.split('.', 1)[0].rstrip(' ')):
+        raise ValueError(f'{what} cannot use a reserved device name: {name}')
+    if name.endswith(('.', ' ')):
+        raise ValueError(f'{what} parts cannot end with a dot or space: {name}')
+
+
+def validate_vault_path(v: str) -> str:
+    '''
+    Validate a vault-relative path and return it with forward slashes.
+
+    The same rules on every platform, checked on the text alone before anything touches
+    the disk: no absolute, rooted, UNC or drive paths, no .. or . parts, no empty parts,
+    and every part a portable name (check_name). A backslash counts as a separator, so
+    windows-style input is checked the same way. VaultClient still resolves the result
+    and refuses anything that lands outside the vault, which covers links.
+    '''
+    if not v or v.strip() == '':
+        raise ValueError('File path cannot be empty')
+    path = v.strip().replace('\\', '/')
+    if path.startswith('/'):
+        raise ValueError('Invalid file path: directory traversal not allowed (absolute or rooted path)')
+    parts = path.split('/')
+    if any(part in ('', '.', '..') for part in parts):
+        if '..' in parts:
+            raise ValueError('Invalid file path: directory traversal not allowed (..)')
+        raise ValueError('Invalid file path: empty or . parts are not allowed')
+    for part in parts:
+        check_name(part)
+    return path
+
+
 class FilePathInput(BaseModel):
     '''Input validation for file path operations.'''
     file_path: str
@@ -108,11 +201,7 @@ class FilePathInput(BaseModel):
     @field_validator('file_path')
     @classmethod
     def validate_file_path(cls, v: str) -> str:
-        if not v or v.strip() == '':
-            raise ValueError('File path cannot be empty')
-        if '..' in v or v.startswith('/'):
-            raise ValueError('Invalid file path: directory traversal not allowed')
-        return v.strip()
+        return validate_vault_path(v)
 
 
 class FileWriteInput(BaseModel):
@@ -123,11 +212,7 @@ class FileWriteInput(BaseModel):
     @field_validator('file_path')
     @classmethod
     def validate_file_path(cls, v: str) -> str:
-        if not v or v.strip() == '':
-            raise ValueError('File path cannot be empty')
-        if '..' in v or v.startswith('/'):
-            raise ValueError('Invalid file path: directory traversal not allowed')
-        return v.strip()
+        return validate_vault_path(v)
 
 
 class ProjectInput(BaseModel):
@@ -146,6 +231,7 @@ class ProjectInput(BaseModel):
                 raise ValueError(f"Project name cannot contain '{char}'")
         if '..' in v:
             raise ValueError("Project name cannot contain '..'")
+        check_name(v, 'Project name')
         return v
 
 

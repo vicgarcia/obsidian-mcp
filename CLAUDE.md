@@ -55,15 +55,15 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 ## Tools Overview
 Thirteen core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
-- `get_current_timestamp` - Current local date and time in every common format (ISO, UTC, unix, date, 12/24h time, human, ISO week, timezone)
-- `list_todays_journal_entry` - Get today's journal path
+- `get_todays_date` - Today's date, 12-hour time with AM/PM, day of the week and timezone (TZ)
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `read_journal_entry` - Read an entry by date
-- `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry (optional `date`, defaults to today; prepend goes after YAML frontmatter)
-
-Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: each entry starts with a `###` heading and uses `####` / `#####` within it.
+- `add_note_to_journal_entry` - Append a note to the `# daily notes` section, which the tool creates (two blank lines before it, a blank line after) in an empty file or one without it, found in any case. The note's content is written exactly as sent (only its ends are trimmed); the tool description gives the agent the layout (a blank line after every heading and before every heading after the first). Then comes a blank line and a `YYYY-MM-DD HH:MM` timestamp line (optional `date`, defaults to today; the stamp is always the current time)
+- `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry. Append and prepend write the text byte for byte, adding and trimming nothing; prepend goes right after YAML frontmatter
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
+
+Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: a `# daily notes` section of `###` notes (`####` / `#####` within), with other `#` sections such as a recap prepended above it. Every journal write uses `newline=''` so files stay LF on Windows.
 
 ## Implementation Notes
 
@@ -79,7 +79,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 
 #### schema.py (Data Models)
 - `YearMonthInput` - Year/month validation
-- `JournalDateInput` / `JournalTextInput` / `JournalWriteInput` - Journal date and edit validation (optional date defaults to today)
+- `JournalDateInput` / `JournalTextInput` / `JournalWriteInput` / `JournalNoteInput` - Journal date and edit validation (optional date defaults to today; `JournalTextInput` keeps text exact, `JournalNoteInput` requires a leading `###` and rejects `#`/`##` outside code fences)
 - `FilePathInput` - File path validation with traversal protection
 - `FileWriteInput` - File write input validation
 - `ProjectInput` - Project name validation
@@ -90,7 +90,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - `VaultError` - Custom exception for vault errors
 - File operations: `read_file()`, `write_file()`, `file_exists()`
 - Directory operations: `list_files()`, `list_directories()`, `create_directory()`
-- Journal operations: `get_journal_path()`, `list_journal_entries()`, `read_journal_entry()`, `write_journal_entry()`, `append_to_journal()`, `prepend_to_journal()`
+- Journal operations: `get_journal_path()`, `list_journal_entries()`, `read_journal_entry()`, `write_journal_entry()`, `append_to_journal()`, `prepend_to_journal()`, `add_note_to_journal()`
 - Project operations: `list_projects()`, `list_project_content()`, `create_project()`
 - Wiki operations: `list_wiki()`
 
@@ -104,7 +104,8 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - Type hints throughout
 - Consistent error handling patterns: `{"error": "message", "success": False}`
 - Structured logging with configurable levels (all lowercase except proper names)
-- Path security validation (no traversal attacks)
+- Path security validation, identical on macOS and Windows (the vault syncs between them). `validate_vault_path` in schema.py checks the text: `\` counts as `/`, no absolute, rooted, UNC or drive paths, no `..`/`.`/empty parts, and every name must be portable (`check_name`: no `< > : " | ? *` or control characters, which also rules out drive letters and NTFS streams; no reserved device names like `nul.md`; no trailing dot or space). `VaultClient._validate_path` runs that check for every caller, then resolves the path (following symlinks and junctions) and refuses anything outside the vault
+- Responses never reveal where the vault lives: errors name vault-relative paths and an OSError's reason (`strerror`), not its text, and every server error goes through `error_response`, which redacts the vault root as a backstop. Full detail goes to the log only
 - Context manager pattern for resource management
 
 ### Entry Point Flow
