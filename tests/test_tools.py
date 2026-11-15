@@ -296,8 +296,8 @@ class TestJournalEntryTools:
         assert second['created'] is False
         assert (vault_path / first['path']).read_bytes() == (
             b'\n\n# daily notes\n\n'
-            b'### Coffee\n\nfirst cup\n\n2026-11-14 09:14\n\n'
-            b'### Walk\n\n#### Route\n\nriver trail\n\n2026-11-14 15:40\n\n'
+            b'### Coffee\nfirst cup\n\n2026-11-14 09:14\n\n'
+            b'### Walk\n#### Route\nriver trail\n\n2026-11-14 15:40\n\n'
         )
 
     def test_add_note_after_midnight_to_the_prior_day(self, vault_path, monkeypatch):
@@ -490,3 +490,21 @@ class TestFileToolsStayInTheVault:
         assert server.write_file('projects\\garage\\plan.md', 'shelves') == {'success': True}
         assert (vault_path / 'projects' / 'garage' / 'plan.md').read_text() == 'shelves'
         assert server.read_file('projects/garage/plan.md') == {'content': 'shelves'}
+
+
+class TestNoteFormatGuidance:
+    '''The agent is told the note layout, since the tool writes notes exactly as sent.'''
+
+    def test_tool_description_shows_the_format(self):
+        doc = server.add_note_to_journal_entry.__doc__
+        # compare line by line: python 3.13 dedents docstrings, older versions don't
+        lines = '\n'.join(line.strip() for line in doc.splitlines())
+        assert 'exactly as you send it' in lines
+        assert '### River trail run\n\nfirst time on the new trail' in lines
+        assert 'road loop\n\n#### Notes\n\n- 5.2 miles' in lines
+        assert "don't end the note with blank lines" in lines
+
+    def test_instructions_point_to_the_format(self):
+        instructions = server.mcp.instructions
+        assert 'written exactly as you send it' in instructions
+        assert 'a blank line after\n  every heading' in instructions

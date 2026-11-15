@@ -112,10 +112,13 @@ adding a note, the usual way to write to the journal:
 - add_note_to_journal_entry appends a note to the # daily notes section, creating the file
   and the section if needed, and stamps it with the time. never write the heading or a
   timestamp yourself.
-- a note starts with a ### heading naming its topic, then the note. organize longer notes
-  with #### sections and ##### subsections, without skipping levels. never use # or ##
-  headings in a note. the tool puts a blank line around every heading, so don't worry
-  about spacing.
+- a note starts with a ### heading naming its topic. organize longer notes with ####
+  sections and ##### subsections, without skipping levels. never use # or ## headings in
+  a note.
+- the note is written exactly as you send it, so lay it out yourself: a blank line after
+  every heading, and a blank line before every heading after the first. the tool adds the
+  blank line and timestamp after the note. the full format is in the
+  add_note_to_journal_entry description.
 - write in first person, natural voice, valuable to read months later. keep quick
   references (links, commands, snippets, todos) in a #### section inside the note.
 
@@ -414,15 +417,27 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
     write to the journal.
 
     Creates the file with a # daily notes section if needed, then appends the note and
-    stamps it with the current time below it. Never write the heading or a timestamp
-    yourself. Existing content is never changed.
+    stamps it with the current time below it. Never write the # daily notes heading or a
+    timestamp yourself. Existing content is never changed.
 
-    The note starts with a ### heading naming the topic, then the note. Organize longer
-    notes with #### sections and ##### subsections; never use # or ##. The tool puts a
-    blank line around every heading and before the timestamp.
+    The note is written exactly as you send it, spacing included, so send it in this
+    format: a ### heading naming the topic, a blank line, the content; for each section,
+    a blank line, a #### heading, a blank line, its content (##### for subsections, the
+    same way). Never use # or ## headings. For example:
+
+        ### River trail run
+
+        first time on the new trail, much better than the road loop
+
+        #### Notes
+
+        - 5.2 miles, mostly flat
+
+    The tool trims the ends of the note and then adds a blank line, the timestamp
+    (YYYY-MM-DD HH:MM) and a blank line, so don't end the note with blank lines.
 
     Args:
-        text: The note, starting with a ### heading (markdown allowed)
+        text: The note in the format above, starting with a ### heading (markdown allowed)
         date: Date in YYYY-MM-DD format (defaults to today). Pass the previous day when the
             user is still on it after midnight.
 

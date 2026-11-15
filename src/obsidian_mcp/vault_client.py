@@ -25,43 +25,9 @@ _FRONTMATTER = re.compile(r'\A---[ \t]*\r?\n(?:.*?\r?\n)??(?:---|\.\.\.)[ \t]*(?
 DAILY_NOTES_HEADING = '# daily notes'
 _DAILY_NOTES = re.compile(r'^# daily notes[ \t]*\r?$', re.MULTILINE | re.IGNORECASE)
 
-# a code fence opener or closer, and any markdown heading (up to 3 spaces of indent)
-_FENCE = re.compile(r'^ {0,3}(```|~~~)')
-_HEADING = re.compile(r'^ {0,3}#{1,6}[ \t]')
-
-
 def _trailing_newlines(text: str) -> int:
     '''How many line breaks the text ends with (\n or \r\n).'''
     return text[len(text.rstrip('\r\n')):].count('\n')
-
-
-def space_note(text: str) -> str:
-    '''
-    Lay a note out with even spacing: one blank line before and after every heading, and
-    runs of blank lines collapsed to one. Code blocks are left exactly as written. The
-    result has no leading or trailing blank lines and uses \n line endings.
-    '''
-    out: List[str] = []
-    fenced = False
-    for line in text.replace('\r\n', '\n').split('\n'):
-        if fenced or _FENCE.match(line):
-            if _FENCE.match(line):
-                fenced = not fenced
-            out.append(line)
-        elif not line.strip():
-            if out and out[-1] != '':
-                out.append('')
-        elif _HEADING.match(line):
-            if out and out[-1] != '':
-                out.append('')
-            out.extend([line, ''])
-        else:
-            out.append(line)
-    while out and out[-1] == '':
-        out.pop()
-    while out and out[0] == '':
-        out.pop(0)
-    return '\n'.join(out)
 
 
 def _reason(error: Exception) -> str:
@@ -496,9 +462,11 @@ class VaultClient:
           appended, two blank lines below the content, then a blank line
         - a file with the heading gets whatever newlines make it end in one blank line
 
-        The note is laid out by space_note (a blank line around every heading), then
-        appended as: note, blank line, YYYY-MM-DD HH:MM, blank line. The timestamp is
-        always the current local time, even when date is an earlier day.
+        The note's content is written exactly as given, spacing included; the tool
+        description tells the agent the layout to use. Only the note's ends are trimmed
+        (by JournalNoteInput), so what follows it is always the same: a blank line,
+        YYYY-MM-DD HH:MM, a blank line. The timestamp is always the current local time,
+        even when date is an earlier day.
 
         Args:
             text: The note, starting with a ### heading
@@ -513,7 +481,7 @@ class VaultClient:
         journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
         timestamp = self.get_local_datetime().strftime('%Y-%m-%d %H:%M')
-        note = f'{space_note(text)}\n\n{timestamp}\n\n'
+        note = f'{text}\n\n{timestamp}\n\n'
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
