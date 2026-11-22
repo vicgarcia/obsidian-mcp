@@ -30,7 +30,7 @@ def test_stdio_startup(vault_path):
                     'list_journal_entries_by_year_and_month', 'read_journal_entry',
                     'write_journal_entry', 'append_to_journal_entry',
                     'prepend_to_journal_entry', 'add_note_to_journal_entry',
-                    'list_projects',
+                    'search_journal', 'list_projects',
                     'list_project_content', 'create_project', 'list_wiki',
                 }
                 result = await session.call_tool('get_todays_date', {})

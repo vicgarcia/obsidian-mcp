@@ -64,7 +64,7 @@ replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
 ## tools
 
-this mcp server exposes 13 tools to interact with your obsidian vault.
+this mcp server exposes 14 tools to interact with your obsidian vault.
 
 #### read_file / write_file
 
@@ -179,6 +179,21 @@ lower-level ways to edit a journal file, each creating the file if needed:
 <sub>example usage with agent:</sub>
 > "add a daily recap to the top of today's journal"
 
+#### search_journal
+
+search journal notes by keyword, newest day first. each `###` note is matched on its own, so every word in the query has to appear in the same note (text above the first note, such as a recap, counts as one more). matching ignores case and line breaks; put words in double quotes to match an exact phrase. there's no index, the journal files are scanned on each call
+
+each result has the entry `date` and `path`, the note's `heading` and `timestamp`, and a short `snippet` around the first match. claude reads the full day with `read_journal_entry`. `total_matches` and `truncated` say when more notes matched than were returned
+
+**parameters:**
+- `query` (required): words to find, e.g. `dentist insurance` or `"river trail" run`
+- `start_date` / `end_date` (optional): YYYY-MM-DD, inclusive
+- `max_results` (optional): 1 to 50, defaults to 20
+
+<sub>example usage with agent:</sub>
+> "when did i last write about the dentist?"
+> "find my notes about the river trail from last spring"
+
 #### list_projects / list_project_content / create_project
 
 manage project directories in your vault
@@ -220,7 +235,7 @@ uv run pytest
 obsidian-mcp/
 ├── src/obsidian_mcp/
 │   ├── __init__.py       # package init, version
-│   ├── server.py         # FastMCP server + 13 tools
+│   ├── server.py         # FastMCP server + 14 tools
 │   ├── vault_client.py   # vault operations (context manager)
 │   └── schema.py         # pydantic validation models
 ├── tests/
@@ -228,6 +243,7 @@ obsidian-mcp/
 │   ├── test_schema.py
 │   ├── test_vault_client.py
 │   ├── test_tools.py
+│   ├── test_search.py
 │   └── test_integration.py
 ├── pyproject.toml
 └── README.md

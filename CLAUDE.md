@@ -1,7 +1,7 @@
 # Claude Code Session Documentation
 
 ## Project Overview
-Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 13 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
+Obsidian MCP Server - A modular Python MCP server for accessing an Obsidian vault in Claude Desktop. Built with MCP, implements 14 core tools for journal entries, projects, and wiki articles. Intentionally minimal to keep context usage low and let Claude handle interpretation.
 
 Installed via `uv tool install` only (no Docker).
 
@@ -11,7 +11,7 @@ obsidian-mcp/
 ├── src/
 │   └── obsidian_mcp/
 │       ├── __init__.py       # package init, version, exports
-│       ├── server.py         # FastMCP server + 13 tools
+│       ├── server.py         # FastMCP server + 14 tools
 │       ├── vault_client.py   # vault operations (context manager)
 │       └── schema.py         # Pydantic validation models
 ├── tests/
@@ -19,6 +19,7 @@ obsidian-mcp/
 │   ├── test_schema.py        # validation model tests
 │   ├── test_vault_client.py  # vault client tests
 │   ├── test_tools.py         # MCP tool tests
+│   ├── test_search.py        # journal search tests
 │   └── test_integration.py   # integration tests
 ├── pyproject.toml            # package metadata and dependencies
 ├── README.md                 # user-facing documentation
@@ -51,13 +52,14 @@ uv tool install git+https://github.com/vicgarcia/obsidian-mcp
 - `LOG_LEVEL`: Optional. DEBUG or INFO (default: INFO)
 
 ## Tools Overview
-Thirteen core MCP tools (see README.md for full documentation):
+Fourteen core MCP tools (see README.md for full documentation):
 - `read_file` / `write_file` - General file operations
 - `get_todays_date` - Today's date, 12-hour time with AM/PM, day of the week and timezone (TZ)
 - `list_journal_entries_by_year_and_month` - List entries for a month
 - `read_journal_entry` - Read an entry by date
 - `add_note_to_journal_entry` - Append a note to the end of the entry, after two blank lines (an empty file starts with the note). The tool adds no section heading. The note must start with a `###` heading; nothing else about its headings is checked. The note's content is written exactly as sent (only its ends are trimmed); the tool description gives the agent the layout (a blank line after every heading and before every heading after the first). Then comes a blank line, a `YYYY-MM-DD HH:MM` timestamp line and two blank lines (optional `date`, defaults to today; the stamp is always the current time)
 - `write_journal_entry` / `append_to_journal_entry` / `prepend_to_journal_entry` - Replace, append to, or prepend to an entry. Append and prepend write the text byte for byte, adding and trimming nothing; prepend goes right after YAML frontmatter
+- `search_journal` - Keyword search over journal notes, newest day first. Each `###` note (plus any text above the first one) is matched on its own; every query word must appear in it, ignoring case, and `"quoted phrases"` match exactly. Optional `start_date` / `end_date` (inclusive) and `max_results` (1-50, default 20). Returns date, path, heading, timestamp and a ~200 char snippet per note, with `total_matches` and `truncated`. Scans the files on every call; no index
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
 
@@ -78,6 +80,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 #### schema.py (Data Models)
 - `YearMonthInput` - Year/month validation
 - `JournalDateInput` / `JournalTextInput` / `JournalWriteInput` / `JournalNoteInput` - Journal date and edit validation (optional date defaults to today; `JournalTextInput` keeps text exact, `JournalNoteInput` requires a leading `###` and rejects `#`/`##` outside code fences)
+- `JournalSearchInput` / `parse_search_terms()` - Search query (words and quoted phrases), date range and result limit validation
 - `FilePathInput` - File path validation with traversal protection
 - `FileWriteInput` - File write input validation
 - `ProjectInput` - Project name validation
@@ -88,13 +91,14 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 - `VaultError` - Custom exception for vault errors
 - File operations: `read_file()`, `write_file()`, `file_exists()`
 - Directory operations: `list_files()`, `list_directories()`, `create_directory()`
-- Journal operations: `get_journal_path()`, `list_journal_entries()`, `read_journal_entry()`, `write_journal_entry()`, `append_to_journal()`, `prepend_to_journal()`, `add_note_to_journal()`
+- Journal operations: `get_journal_path()`, `list_journal_entries()`, `read_journal_entry()`, `write_journal_entry()`, `append_to_journal()`, `prepend_to_journal()`, `add_note_to_journal()`, `search_journal()`
+- Journal search helpers: `split_journal_notes()` splits an entry on `###` lines outside code fences and pulls the timestamp line off each note
 - Project operations: `list_projects()`, `list_project_content()`, `create_project()`
 - Wiki operations: `list_wiki()`
 
 #### server.py (MCP Server)
 - FastMCP server initialization
-- 13 `@mcp.tool()` definitions
+- 14 `@mcp.tool()` definitions
 - Module-level client singleton
 - Entry point `run()` function
 
@@ -120,7 +124,7 @@ run()
 
 ### What We Built
 - **Modular architecture**: 3 core modules with clear responsibilities
-- **13 tools**: Covering three workflows (files/journal, projects, wiki)
+- **14 tools**: Covering three workflows (files/journal, projects, wiki)
 - **Strict filesystem structure**: `journal/YYYY/MM/`, `projects/`, `wiki/`
 - **Single deployment**: uv tool install
 - **Path validation**: Security-first file operations
@@ -129,7 +133,7 @@ run()
 ### What We Didn't Build
 - No templates (just create files directly)
 - No tag support (filesystem organization is enough)
-- No complex queries (let Claude interpret)
+- No complex queries (let Claude interpret); journal search is plain keyword matching, no regex, ranking or index
 - No file deletion/moving (use read/write instead)
 - No metadata parsing (filenames describe content)
 
@@ -144,6 +148,6 @@ run()
 - Single quotes for strings
 
 ### Testing
-- Tests organized by module (test_schema.py, test_vault_client.py, test_tools.py)
+- Tests organized by module (test_schema.py, test_vault_client.py, test_tools.py), journal search in test_search.py
 - Integration tests in test_integration.py
 - Test data generated on the fly using pytest tmp_path

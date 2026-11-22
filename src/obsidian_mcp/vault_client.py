@@ -26,6 +26,82 @@ def _trailing_newlines(text: str) -> int:
     return text[len(text.rstrip('\r\n')):].count('\n')
 
 
+# the timestamp line add_note_to_journal writes below each note
+_NOTE_TIMESTAMP = re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$')
+# a line that opens or closes a fenced code block
+_FENCE = re.compile(r'^\s{0,3}(`{3,}|~{3,})')
+
+SNIPPET_LENGTH = 200
+# how much of the snippet comes before the first match
+_SNIPPET_LEAD = 60
+
+
+def split_journal_notes(text: str) -> List[Dict[str, Any]]:
+    '''
+    Split a journal entry into its notes.
+
+    A note starts at a line beginning with ### outside a fenced code block and runs to the
+    next one. Anything above the first note (a prepended recap, frontmatter) becomes a
+    section of its own with no heading, if it isn't blank.
+
+    Returns:
+        List of dictionaries with heading (None for the top section), body (the text below
+        the heading, without the timestamp line) and timestamp (or None)
+    '''
+    sections: List[Tuple[Optional[str], List[str]]] = [(None, [])]
+    fence: Optional[str] = None
+
+    for line in text.splitlines():
+        match = _FENCE.match(line)
+        if match:
+            marker = match.group(1)
+            if fence is None:
+                fence = marker
+            elif marker[0] == fence[0] and len(marker) >= len(fence):
+                fence = None
+        elif fence is None and line.startswith('### '):
+            sections.append((line[4:].strip(), []))
+            continue
+        sections[-1][1].append(line)
+
+    notes = []
+    for heading, lines in sections:
+        while lines and not lines[-1].strip():
+            lines.pop()
+        timestamp = None
+        if lines and _NOTE_TIMESTAMP.match(lines[-1].strip()):
+            timestamp = lines.pop().strip()
+        body = '\n'.join(lines).strip()
+        if heading is None and not body:
+            continue
+        notes.append({'heading': heading, 'body': body, 'timestamp': timestamp})
+    return notes
+
+
+def _note_matches(note: Dict[str, Any], terms: List[str]) -> bool:
+    '''Whether every term appears in the note's heading or body, ignoring case.'''
+    haystack = ' '.join(f"{note['heading'] or ''}\n{note['body']}".split()).casefold()
+    return all(term in haystack for term in terms)
+
+
+def _snippet(body: str, terms: List[str]) -> str:
+    '''A short excerpt of the body around the first match, whitespace collapsed.'''
+    flat = ' '.join(body.split())
+    folded = flat.casefold()
+    hits = [i for i in (folded.find(term) for term in terms) if i >= 0]
+    start = max(0, min(hits) - _SNIPPET_LEAD) if hits else 0
+    # start on a word boundary
+    if start > 0:
+        space = flat.find(' ', start)
+        start = space + 1 if 0 <= space < start + 20 else start
+    end = start + SNIPPET_LENGTH
+    if end < len(flat):
+        space = flat.rfind(' ', start, end)
+        end = space if space > start else end
+    excerpt = flat[start:end]
+    return ('…' if start > 0 else '') + excerpt + ('…' if end < len(flat) else '')
+
+
 def _reason(error: Exception) -> str:
     '''
     Why an operation failed, without the file name.
@@ -513,6 +589,78 @@ class VaultClient:
         created = not self.file_exists(journal_path)
         self.write_file(journal_path, content)
         return {'path': journal_path, 'created': created}
+
+    def search_journal(
+        self,
+        terms: List[str],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        max_results: int = 20,
+    ) -> Dict[str, Any]:
+        '''
+        Find journal notes that contain every term, newest day first.
+
+        Each entry is split into notes (split_journal_notes) and a note matches when all
+        terms appear in its heading or body, ignoring case and line breaks. Every entry in
+        the range is scanned on each call; there is no index to go stale.
+
+        Args:
+            terms: Lowercase search terms (words or phrases)
+            start_date: Earliest entry date to search, YYYY-MM-DD (inclusive)
+            end_date: Latest entry date to search, YYYY-MM-DD (inclusive)
+            max_results: Most notes to return
+
+        Returns:
+            Dictionary with results (date, path, heading, timestamp, snippet), the total
+            number of matching notes, and whether results were cut off at max_results
+        '''
+        first_month = start_date[:7] if start_date else None
+        last_month = end_date[:7] if end_date else None
+
+        results: List[Dict[str, Any]] = []
+        total = 0
+        entries_searched = 0
+
+        years = [d['name'] for d in self.list_directories('journal') if re.fullmatch(r'\d{4}', d['name'])]
+        for year in sorted(years, reverse=True):
+            if (first_month and year < first_month[:4]) or (last_month and year > last_month[:4]):
+                continue
+            months = [d['name'] for d in self.list_directories(f'journal/{year}')
+                      if re.fullmatch(r'0[1-9]|1[0-2]', d['name'])]
+            for month in sorted(months, reverse=True):
+                year_month = f'{year}-{month}'
+                if (first_month and year_month < first_month) or (last_month and year_month > last_month):
+                    continue
+                for entry in reversed(self.list_journal_entries(year, month)):
+                    entry_date = entry['name'][:-3]
+                    if (start_date and entry_date < start_date) or (end_date and entry_date > end_date):
+                        continue
+                    try:
+                        content = self.read_file(entry['path'])
+                    except VaultError as e:
+                        logger.warning(f'skipping journal entry in search: {e}')
+                        continue
+                    entries_searched += 1
+                    for note in split_journal_notes(content):
+                        if not _note_matches(note, terms):
+                            continue
+                        total += 1
+                        if len(results) < max_results:
+                            results.append({
+                                'date': entry_date,
+                                'path': entry['path'],
+                                'heading': note['heading'],
+                                'timestamp': note['timestamp'],
+                                'snippet': _snippet(note['body'], terms),
+                            })
+
+        logger.info(f'journal search for {terms}: {total} notes in {entries_searched} entries')
+        return {
+            'results': results,
+            'total_matches': total,
+            'truncated': total > len(results),
+            'entries_searched': entries_searched,
+        }
 
     # project operations
 

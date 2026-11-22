@@ -21,6 +21,7 @@ from obsidian_mcp.schema import (
     FileWriteInput,
     JournalDateInput,
     JournalNoteInput,
+    JournalSearchInput,
     JournalTextInput,
     JournalWriteInput,
     ProjectInput,
@@ -128,6 +129,11 @@ other edits (date is YYYY-MM-DD, defaults to today):
   added, so include the newlines you need.
 - write_journal_entry replaces the whole file. read it first with read_journal_entry and
   keep everything you aren't changing; use it only to edit or reorganize existing content.
+
+finding past notes:
+- search_journal finds notes containing every word in the query, newest first, and
+  returns snippets. use it when the user asks about something they wrote before but
+  doesn't give the date, then read_journal_entry for the full day.
 '''
 
 # mcp server
@@ -458,6 +464,63 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
     except Exception as e:
         logger.exception(f'unexpected error adding note to journal: {e}')
         return error_response(f'Unexpected error adding note to journal: {e}')
+
+
+@mcp.tool()
+def search_journal(
+    query: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    max_results: int = 20,
+) -> Dict[str, Any]:
+    '''
+    Search journal notes by keyword, newest first.
+
+    Each ### note in an entry is searched on its own (text above the first note, such as
+    a recap, counts as one more). A note matches when it contains every word in the query,
+    ignoring case; put words in double quotes to match them as an exact phrase. This is
+    keyword search, not semantic: use two or three distinctive words, and if nothing comes
+    back try synonyms, fewer words, or a single word. Narrow with start_date and end_date
+    when you know roughly when something happened.
+
+    Results are short snippets. Read the full entry with read_journal_entry and the result's
+    date. When truncated is true, more notes matched than were returned; narrow the dates
+    or the query rather than raising max_results.
+
+    Args:
+        query: Words to find, e.g. 'dentist insurance' or '"river trail" run'
+        start_date: Earliest entry date to search, YYYY-MM-DD (optional)
+        end_date: Latest entry date to search, YYYY-MM-DD (optional)
+        max_results: Most notes to return, 1 to 50 (default 20)
+
+    Returns:
+        Dictionary with results (each with date, path, heading, timestamp, snippet),
+        total_matches, truncated, and entries_searched
+    '''
+    try:
+        logger.debug(f'search_journal called: query={query!r}, start={start_date}, end={end_date}')
+        validated_input = JournalSearchInput(
+            query=query, start_date=start_date, end_date=end_date, max_results=max_results
+        )
+
+        with get_client() as vault:
+            result = vault.search_journal(
+                validated_input.terms(),
+                validated_input.start_date,
+                validated_input.end_date,
+                validated_input.max_results,
+            )
+            return {'query': validated_input.query, **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error searching journal: {e}')
+        return error_response(f'Invalid input: {e}')
+    except VaultError as e:
+        logger.error(f'vault error searching journal: {e}')
+        return format_error(e)
+    except Exception as e:
+        logger.exception(f'unexpected error searching journal: {e}')
+        return error_response(f'Unexpected error searching journal: {e}')
 
 
 # project tools

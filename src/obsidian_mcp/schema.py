@@ -4,9 +4,9 @@ Pydantic validation models for Obsidian MCP input validation.
 
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class YearMonthInput(BaseModel):
@@ -133,6 +133,70 @@ class JournalWriteInput(BaseModel):
     def entry_date(self) -> Optional[datetime]:
         '''The parsed entry date, or None for today.'''
         return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
+
+
+# a "quoted phrase" or a single word
+_QUERY_TERM = re.compile(r'"([^"]*)"|(\S+)')
+
+MAX_QUERY_LENGTH = 200
+MAX_SEARCH_RESULTS = 50
+
+
+def parse_search_terms(query: str) -> List[str]:
+    '''
+    Split a search query into lowercase terms.
+
+    Words are separate terms; text in double quotes is kept together as one phrase. An
+    unmatched quote is treated as part of a word.
+    '''
+    terms = []
+    for phrase, word in _QUERY_TERM.findall(query):
+        term = ' '.join((phrase if phrase else word).split()).casefold()
+        if term:
+            terms.append(term)
+    return terms
+
+
+class JournalSearchInput(BaseModel):
+    '''Input validation for searching the journal.'''
+    query: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    max_results: int = 20
+
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Query cannot be empty')
+        if len(v) > MAX_QUERY_LENGTH:
+            raise ValueError(f'Query cannot be longer than {MAX_QUERY_LENGTH} characters')
+        if not parse_search_terms(v):
+            raise ValueError('Query must contain at least one word')
+        return v
+
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else _validate_journal_date(v)
+
+    @field_validator('max_results')
+    @classmethod
+    def validate_max_results(cls, v: int) -> int:
+        if v < 1 or v > MAX_SEARCH_RESULTS:
+            raise ValueError(f'max_results must be between 1 and {MAX_SEARCH_RESULTS}')
+        return v
+
+    @model_validator(mode='after')
+    def validate_range(self) -> 'JournalSearchInput':
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError('start_date cannot be after end_date')
+        return self
+
+    def terms(self) -> List[str]:
+        '''The query split into lowercase terms.'''
+        return parse_search_terms(self.query)
 
 
 # names windows treats as devices, with or without an extension (nul.md is nul), any case;
