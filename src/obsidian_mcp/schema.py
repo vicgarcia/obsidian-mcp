@@ -87,8 +87,8 @@ class JournalNoteInput(BaseModel):
     '''
     Input validation for adding a note to a journal entry (date defaults to today).
 
-    The note is trimmed and can't be empty. Its layout is guidance in the tool description,
-    not checked here.
+    The note is trimmed and must start with a ### heading. The rest of its layout is
+    guidance in the tool description, not checked here.
     '''
     text: str
     date: Optional[str] = None
@@ -99,6 +99,8 @@ class JournalNoteInput(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError('Note cannot be empty')
+        if not v.startswith('### '):
+            raise ValueError('Note must start with a ### heading')
         return v
 
     @field_validator('date')

@@ -473,11 +473,9 @@ class TestJournalNotes:
         '### tight\nno blank line after the heading\n#### section\nor here',
         '### loose\n\n\n\nlots of blank lines\n\n\n#### section\n\n\nkept as sent',
         '### code\n\n```bash\n# a comment\n\n\nuv sync\n```',
-        '# my own heading\n\n## and another\n\nheadings are up to the agent',
-        'no heading at all',
     ])
     def test_note_content_is_written_exactly_as_sent(self, vault_path, clock, note):
-        '''The tool never respaces or checks a note; only its ends are trimmed before the timestamp.'''
+        '''The tool never respaces a note; only its ends are trimmed before the timestamp.'''
         with VaultClient(str(vault_path)) as vault:
             vault.add_note_to_journal(note, self.DAY)
         assert self._entry(vault_path).read_text() == f'{note}\n\n2026-11-14 09:14\n\n\n'

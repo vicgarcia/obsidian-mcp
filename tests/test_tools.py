@@ -306,15 +306,16 @@ class TestJournalEntryTools:
         assert result['path'] == 'journal/2026/11/2026-11-14.md'
         assert result['timestamp'] == '2026-11-15 00:45'
 
-    @pytest.mark.parametrize('bad', ['', '   ', '\n\n'])
-    def test_add_note_rejects_empty_notes(self, bad, vault_path):
+    @pytest.mark.parametrize('bad', ['', '   ', '\n\n', 'no heading', '#### Section first', '## Topic',
+                                     '# Topic', '###Topic', 'text\n### Topic later'])
+    def test_add_note_rejects_notes_without_a_leading_h3(self, bad, vault_path):
         result = server.add_note_to_journal_entry(bad)
         assert result['success'] is False
         assert 'Invalid input' in result['error']
         assert list((vault_path / 'journal').rglob('*.md')) == [vault_path / 'journal/2025/01/2025-01-15.md']
 
-    @pytest.mark.parametrize('note', ['no heading', '#### Section first', '## Topic', '### Topic\n# Top level'])
-    def test_add_note_leaves_headings_to_the_agent(self, note, vault_path):
+    @pytest.mark.parametrize('note', ['### Topic', '### Topic\n\n#### Section', '### Topic\n# Top level later'])
+    def test_add_note_checks_only_the_leading_h3(self, note, vault_path):
         result = server.add_note_to_journal_entry(note)
         assert result['success'] is True
         assert (vault_path / result['path']).read_text().startswith(note + '\n\n')

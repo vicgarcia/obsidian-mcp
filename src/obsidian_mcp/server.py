@@ -111,7 +111,7 @@ dates:
 adding a note, the usual way to write to the journal:
 - add_note_to_journal_entry appends a note to the end of the file, creating the file if
   needed, and stamps it with the time. never write a timestamp yourself.
-- start a note with a ### heading naming its topic. organize longer notes with ####
+- a note must start with a ### heading naming its topic. organize longer notes with ####
   sections and ##### subsections, without skipping levels.
 - the note is written exactly as you send it, so lay it out yourself: a blank line after
   every heading, and a blank line before every heading after the first. the tool adds a
@@ -417,7 +417,7 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
     below it. Never write a timestamp yourself. Existing content is never changed.
 
     The note is written exactly as you send it, spacing included, so send it in this
-    format: a ### heading naming the topic, a blank line, the content; for each section,
+    format: a ### heading naming the topic (required), a blank line, the content; for each section,
     a blank line, a #### heading, a blank line, its content (##### for subsections, the
     same way). For example:
 
@@ -433,7 +433,7 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
     (YYYY-MM-DD HH:MM) and two blank lines, so don't end the note with blank lines.
 
     Args:
-        text: The note in the format above (markdown allowed)
+        text: The note in the format above, starting with a ### heading (markdown allowed)
         date: Date in YYYY-MM-DD format (defaults to today). Pass the previous day when the
             user is still on it after midnight.
 

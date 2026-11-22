@@ -149,7 +149,7 @@ the file is always written with `\n` line endings, on mac and windows alike
 
 #### add_note_to_journal_entry
 
-add a note to the end of a journal entry, the usual way to write to the journal. the tool description asks the agent to start the note with a `###` heading naming its topic and organize a long note with `####` and `#####`; the tool doesn't check headings. the agent sends only the note; the tool handles the spacing around it and the timestamp:
+add a note to the end of a journal entry, the usual way to write to the journal. the note must start with a `###` heading naming its topic, or it's rejected. the tool description asks the agent to organize a long note with `####` and `#####`; those aren't checked. the agent sends only the note; the tool handles the spacing around it and the timestamp:
 
 - a missing or empty file starts with the note. otherwise the file gets whatever newlines make it end in two blank lines, then the note
 - the note's content is written exactly as the agent sends it, spacing included; only its ends are trimmed. the tool description gives the agent the layout to use: a blank line after every heading, and a blank line before every heading after the first
@@ -157,7 +157,7 @@ add a note to the end of a journal entry, the usual way to write to the journal.
 - the timestamp is the current time even when `date` is an earlier day, so a note written at 00:45 for yesterday shows when it was really written
 
 **parameters:**
-- `text` (required): the note, usually starting with a `###` heading
+- `text` (required): the note, starting with a `###` heading
 - `date` (optional): date in YYYY-MM-DD format, defaults to today
 
 <sub>example usage with agent:</sub>
