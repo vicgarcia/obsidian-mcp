@@ -372,10 +372,9 @@ class TestJournalPrependAndWrite:
 
 
 class TestJournalNotes:
-    '''Test adding notes to the daily notes section.'''
+    '''Test adding notes to the end of a journal entry.'''
 
     DAY = datetime(2026, 11, 14)
-    SKELETON = b'\n\n# daily notes\n\n'
 
     @pytest.fixture
     def clock(self, monkeypatch):
@@ -392,13 +391,17 @@ class TestJournalNotes:
             entry.write_bytes(content)
         return entry
 
-    def test_note_creates_the_skeleton(self, vault_path, clock):
+    def test_note_starts_a_new_file(self, vault_path, clock):
         with VaultClient(str(vault_path)) as vault:
             result = vault.add_note_to_journal('### Coffee\nfirst cup', self.DAY)
         assert result == {'path': 'journal/2026/11/2026-11-14.md', 'created': True, 'timestamp': '2026-11-14 09:14'}
-        assert self._entry(vault_path).read_bytes() == (
-            b'\n\n# daily notes\n\n### Coffee\nfirst cup\n\n2026-11-14 09:14\n\n'
-        )
+        assert self._entry(vault_path).read_bytes() == b'### Coffee\nfirst cup\n\n2026-11-14 09:14\n\n\n'
+
+    def test_no_section_heading_is_added(self, vault_path, clock):
+        entry = self._entry(vault_path, b'# daily recap\n\ngood day\n')
+        with VaultClient(str(vault_path)) as vault:
+            vault.add_note_to_journal('### Note\nx', self.DAY)
+        assert b'daily notes' not in entry.read_bytes().lower()
 
     def test_the_requested_layout(self, vault_path, clock):
         '''A note sent in the documented format reads with a blank line around every heading.'''
@@ -408,10 +411,6 @@ class TestJournalNotes:
                 self.DAY,
             )
         assert self._entry(vault_path).read_text() == (
-            '\n'
-            '\n'
-            '# daily notes\n'
-            '\n'
             '### note heading\n'
             '\n'
             'content in the note\n'
@@ -422,6 +421,7 @@ class TestJournalNotes:
             '\n'
             '2026-11-14 09:14\n'
             '\n'
+            '\n'
         )
 
     def test_notes_through_the_day(self, vault_path, clock):
@@ -429,67 +429,40 @@ class TestJournalNotes:
             vault.add_note_to_journal('### One\nfirst', self.DAY)
             clock.now = datetime(2026, 11, 14, 23, 59)
             vault.add_note_to_journal('### Two\nsecond', self.DAY)
-        assert self._entry(vault_path).read_bytes() == self.SKELETON + (
-            b'### One\nfirst\n\n2026-11-14 09:14\n\n### Two\nsecond\n\n2026-11-14 23:59\n\n'
+        assert self._entry(vault_path).read_bytes() == (
+            b'### One\nfirst\n\n2026-11-14 09:14\n\n\n### Two\nsecond\n\n2026-11-14 23:59\n\n\n'
         )
 
     @pytest.mark.parametrize('content', [b'', b'\n', b'  \n\n'])
-    def test_empty_file_gets_the_skeleton(self, vault_path, clock, content):
+    def test_empty_file_starts_with_the_note(self, vault_path, clock, content):
         entry = self._entry(vault_path, content)
         with VaultClient(str(vault_path)) as vault:
             result = vault.add_note_to_journal('### Note\nx', self.DAY)
             assert result['created'] is False
-        assert entry.read_bytes() == self.SKELETON + b'### Note\nx\n\n2026-11-14 09:14\n\n'
+        assert entry.read_bytes() == b'### Note\nx\n\n2026-11-14 09:14\n\n\n'
 
-    @pytest.mark.parametrize('content, gap', [
+    @pytest.mark.parametrize('content, lead', [
         (b'# daily recap\ngood day', b'\n\n\n'),
         (b'# daily recap\ngood day\n', b'\n\n'),
         (b'# daily recap\ngood day\n\n', b'\n'),
         (b'# daily recap\ngood day\n\n\n', b''),
         (b'# daily recap\ngood day\n\n\n\n', b''),
     ])
-    def test_heading_is_added_two_blank_lines_below_content(self, vault_path, clock, content, gap):
+    def test_existing_content_ends_in_two_blank_lines_before_the_note(self, vault_path, clock, content, lead):
         entry = self._entry(vault_path, content)
         with VaultClient(str(vault_path)) as vault:
             vault.add_note_to_journal('### Note\nx', self.DAY)
-        assert entry.read_bytes() == content + gap + b'# daily notes\n\n### Note\nx\n\n2026-11-14 09:14\n\n'
+        assert entry.read_bytes() == content + lead + b'### Note\nx\n\n2026-11-14 09:14\n\n\n'
 
     def test_recap_prepended_above_existing_notes(self, vault_path, clock):
         with VaultClient(str(vault_path)) as vault:
             vault.add_note_to_journal('### Note\nx', self.DAY)
-            vault.prepend_to_journal('# daily recap\n\nall good\n', self.DAY)
+            vault.prepend_to_journal('# daily recap\n\nall good\n\n\n', self.DAY)
             vault.add_note_to_journal('### Later\ny', self.DAY)
         assert self._entry(vault_path).read_bytes() == (
-            b'# daily recap\n\nall good\n\n\n# daily notes\n\n'
-            b'### Note\nx\n\n2026-11-14 09:14\n\n### Later\ny\n\n2026-11-14 09:14\n\n'
+            b'# daily recap\n\nall good\n\n\n'
+            b'### Note\nx\n\n2026-11-14 09:14\n\n\n### Later\ny\n\n2026-11-14 09:14\n\n\n'
         )
-
-    @pytest.mark.parametrize('content, lead', [
-        (b'\n\n# daily notes\n\n### Edited\n\nby hand', b'\n\n'),
-        (b'\n\n# daily notes\n\n### Edited\n\nby hand\n', b'\n'),
-        (b'\n\n# daily notes\n\n### Edited\n\nby hand\n\n', b''),
-        (b'\n\n# daily notes\n', b'\n'),
-    ])
-    def test_existing_section_ends_in_one_blank_line_before_the_note(self, vault_path, clock, content, lead):
-        entry = self._entry(vault_path, content)
-        with VaultClient(str(vault_path)) as vault:
-            vault.add_note_to_journal('### Note\nx', self.DAY)
-        assert entry.read_bytes() == content + lead + b'### Note\nx\n\n2026-11-14 09:14\n\n'
-
-    @pytest.mark.parametrize('heading', [b'# Daily Notes', b'# DAILY NOTES', b'# daily notes  ', b'# Daily Notes\r'])
-    def test_heading_in_any_case_is_found(self, vault_path, clock, heading):
-        entry = self._entry(vault_path, heading + b'\n\n')
-        with VaultClient(str(vault_path)) as vault:
-            vault.add_note_to_journal('### Note\nx', self.DAY)
-        content = entry.read_bytes()
-        assert content.lower().count(b'daily notes') == 1
-        assert content == heading + b'\n\n### Note\nx\n\n2026-11-14 09:14\n\n'
-
-    def test_level_two_daily_notes_is_not_the_section(self, vault_path, clock):
-        entry = self._entry(vault_path, b'## daily notes\n')
-        with VaultClient(str(vault_path)) as vault:
-            vault.add_note_to_journal('### Note\nx', self.DAY)
-        assert entry.read_bytes() == b'## daily notes\n\n\n# daily notes\n\n### Note\nx\n\n2026-11-14 09:14\n\n'
 
     def test_note_defaults_to_today(self, vault_path, clock):
         with VaultClient(str(vault_path)) as vault:
@@ -500,9 +473,11 @@ class TestJournalNotes:
         '### tight\nno blank line after the heading\n#### section\nor here',
         '### loose\n\n\n\nlots of blank lines\n\n\n#### section\n\n\nkept as sent',
         '### code\n\n```bash\n# a comment\n\n\nuv sync\n```',
+        '# my own heading\n\n## and another\n\nheadings are up to the agent',
+        'no heading at all',
     ])
     def test_note_content_is_written_exactly_as_sent(self, vault_path, clock, note):
-        '''The tool never respaces a note; only its ends are trimmed before the timestamp.'''
+        '''The tool never respaces or checks a note; only its ends are trimmed before the timestamp.'''
         with VaultClient(str(vault_path)) as vault:
             vault.add_note_to_journal(note, self.DAY)
-        assert self._entry(vault_path).read_text() == f'\n\n# daily notes\n\n{note}\n\n2026-11-14 09:14\n\n'
+        assert self._entry(vault_path).read_text() == f'{note}\n\n2026-11-14 09:14\n\n\n'

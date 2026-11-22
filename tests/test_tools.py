@@ -295,9 +295,8 @@ class TestJournalEntryTools:
         second = server.add_note_to_journal_entry('### Walk\n#### Route\nriver trail')
         assert second['created'] is False
         assert (vault_path / first['path']).read_bytes() == (
-            b'\n\n# daily notes\n\n'
-            b'### Coffee\nfirst cup\n\n2026-11-14 09:14\n\n'
-            b'### Walk\n#### Route\nriver trail\n\n2026-11-14 15:40\n\n'
+            b'### Coffee\nfirst cup\n\n2026-11-14 09:14\n\n\n'
+            b'### Walk\n#### Route\nriver trail\n\n2026-11-14 15:40\n\n\n'
         )
 
     def test_add_note_after_midnight_to_the_prior_day(self, vault_path, monkeypatch):
@@ -307,24 +306,18 @@ class TestJournalEntryTools:
         assert result['path'] == 'journal/2026/11/2026-11-14.md'
         assert result['timestamp'] == '2026-11-15 00:45'
 
-    @pytest.mark.parametrize('bad', [
-        '',
-        '   ',
-        'no heading',
-        '#### Section first',
-        '## Topic',
-        '### Topic\n## Breaks out',
-        '### Topic\n# Breaks out',
-    ])
-    def test_add_note_rejects_bad_notes(self, bad, vault_path):
+    @pytest.mark.parametrize('bad', ['', '   ', '\n\n'])
+    def test_add_note_rejects_empty_notes(self, bad, vault_path):
         result = server.add_note_to_journal_entry(bad)
         assert result['success'] is False
         assert 'Invalid input' in result['error']
         assert list((vault_path / 'journal').rglob('*.md')) == [vault_path / 'journal/2025/01/2025-01-15.md']
 
-    def test_add_note_allows_hash_lines_in_code_blocks(self, vault_path):
-        result = server.add_note_to_journal_entry('### Setup\n```bash\n# install deps\nuv sync\n```')
+    @pytest.mark.parametrize('note', ['no heading', '#### Section first', '## Topic', '### Topic\n# Top level'])
+    def test_add_note_leaves_headings_to_the_agent(self, note, vault_path):
+        result = server.add_note_to_journal_entry(note)
         assert result['success'] is True
+        assert (vault_path / result['path']).read_text().startswith(note + '\n\n')
 
     @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry', 'write_journal_entry'])
     def test_journal_edit_tools_reject_empty_text(self, tool):
@@ -346,10 +339,10 @@ class TestJournalEntryTools:
         assert result['success'] is False
         assert 'Invalid input' in result['error']
 
-    def test_server_instructions_describe_daily_notes(self):
+    def test_server_instructions_describe_notes(self):
         instructions = server.mcp.instructions
         assert instructions == server.JOURNAL_FORMAT
-        assert '# daily notes' in instructions
+        assert 'daily notes' not in instructions
         assert '### heading' in instructions
         for tool in ('add_note_to_journal_entry', 'write_journal_entry', 'append_to_journal_entry',
                      'prepend_to_journal_entry', 'read_journal_entry', 'get_todays_date'):

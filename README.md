@@ -120,18 +120,15 @@ read the journal entry for a date; returns its `path`, `exists: false` and empty
 
 #### journal format
 
-a day's file has a `# daily notes` section that notes are added to through the day, each stamped with the time it was added. other top-level sections, such as a daily recap, go above it. no date heading, obsidian handles that. this guidance is sent to claude as server instructions
+notes are added to the end of a day's file through the day, each stamped with the time it was added. anything that belongs above them, such as a daily recap, is prepended. no date heading, obsidian handles that. this guidance is sent to claude as server instructions
 
 ```markdown
-
-
-# daily notes
-
 ### Morning run
 
 first-person narrative...
 
 2026-11-14 07:50
+
 
 ### obsidian-mcp refactor
 
@@ -145,22 +142,22 @@ first-person narrative...
 
 2026-11-14 15:40
 
+
 ```
 
 the file is always written with `\n` line endings, on mac and windows alike
 
 #### add_note_to_journal_entry
 
-add a note to the `# daily notes` section, the usual way to write to the journal. the note starts with a `###` heading naming its topic, then the note, organized with `####` and `#####` if it's long; `#` and `##` headings are rejected (outside code blocks). the agent sends only the note; the tool handles the section heading and the timestamp:
+add a note to the end of a journal entry, the usual way to write to the journal. the tool description asks the agent to start the note with a `###` heading naming its topic and organize a long note with `####` and `#####`; the tool doesn't check headings. the agent sends only the note; the tool handles the spacing around it and the timestamp:
 
-- a missing or empty file starts as two blank lines, `# daily notes` and a blank line
-- a file without the heading gets `# daily notes` appended two blank lines below its content. any case counts as the heading, so an older `# Daily Notes` isn't duplicated
+- a missing or empty file starts with the note. otherwise the file gets whatever newlines make it end in two blank lines, then the note
 - the note's content is written exactly as the agent sends it, spacing included; only its ends are trimmed. the tool description gives the agent the layout to use: a blank line after every heading, and a blank line before every heading after the first
-- the note is appended followed by a blank line, the timestamp (`YYYY-MM-DD HH:MM`, 24-hour) and a blank line, so notes sit one blank line apart
+- the note is appended followed by a blank line, the timestamp (`YYYY-MM-DD HH:MM`, 24-hour) and two blank lines, so notes sit two blank lines apart
 - the timestamp is the current time even when `date` is an earlier day, so a note written at 00:45 for yesterday shows when it was really written
 
 **parameters:**
-- `text` (required): the note, starting with a `###` heading
+- `text` (required): the note, usually starting with a `###` heading
 - `date` (optional): date in YYYY-MM-DD format, defaults to today
 
 <sub>example usage with agent:</sub>
