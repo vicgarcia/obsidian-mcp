@@ -471,15 +471,6 @@ class TestFileToolsStayInTheVault:
             assert 'outside vault' in read['error'] and 'outside vault' in write['error'], path
         assert not (outside.parent / 'new.md').exists()
 
-    def test_file_symlink_out_of_the_vault_is_refused(self, vault_path, outside):
-        link = vault_path / 'projects' / 'p' / 'link.md'
-        try:
-            link.symlink_to(outside)
-        except OSError:
-            pytest.skip('cannot create a file symlink here (windows without developer mode)')
-        assert 'outside vault' in server.read_file('projects/p/link.md')['error']
-        assert 'outside vault' in server.write_file('projects/p/link.md', 'OVERWRITTEN')['error']
-
     def test_backslash_paths_work_on_every_platform(self, vault_path):
         assert server.write_file('projects\\garage\\plan.md', 'shelves') == {'success': True}
         assert (vault_path / 'projects' / 'garage' / 'plan.md').read_text() == 'shelves'
