@@ -2,7 +2,7 @@
 obsidian-mcp: MCP server for accessing an opinionated Obsidian vault.
 '''
 
-__version__ = '3.0.0'
+__version__ = '3.1.0'
 
 from obsidian_mcp.server import run
 

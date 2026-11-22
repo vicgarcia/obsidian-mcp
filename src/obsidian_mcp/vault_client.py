@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 # yaml frontmatter: a --- line at the very start, closed by the next --- (or ...) line
 _FRONTMATTER = re.compile(r'\A---[ \t]*\r?\n(?:.*?\r?\n)??(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)', re.DOTALL)
 
-# the section notes are added to through the day. it is written lowercase, after two blank
-# lines, and found in any case so a file with an older # Daily Notes doesn't get a second one
-DAILY_NOTES_HEADING = '# daily notes'
-_DAILY_NOTES = re.compile(r'^# daily notes[ \t]*\r?$', re.MULTILINE | re.IGNORECASE)
 
 def _trailing_newlines(text: str) -> int:
     '''How many line breaks the text ends with (\n or \r\n).'''
@@ -453,23 +449,19 @@ class VaultClient:
 
     def add_note_to_journal(self, text: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         '''
-        Append a note to the daily notes section of a journal entry, stamped with the time.
+        Append a note to the end of a journal entry, stamped with the time.
 
-        The section heading is the tool's job, never the agent's:
-        - a missing, empty or whitespace-only file becomes two blank lines, # daily notes
-          and a blank line
-        - a file with content but no # daily notes line (in any case) gets the heading
-          appended, two blank lines below the content, then a blank line
-        - a file with the heading gets whatever newlines make it end in one blank line
+        A missing, empty or whitespace-only file starts with the note. Otherwise the file
+        gets whatever newlines make it end in two blank lines, then the note.
 
         The note's content is written exactly as given, spacing included; the tool
         description tells the agent the layout to use. Only the note's ends are trimmed
         (by JournalNoteInput), so what follows it is always the same: a blank line,
-        YYYY-MM-DD HH:MM, a blank line. The timestamp is always the current local time,
+        YYYY-MM-DD HH:MM, two blank lines. The timestamp is always the current local time,
         even when date is an earlier day.
 
         Args:
-            text: The note, starting with a ### heading
+            text: The note
             date: Date of the journal entry. Defaults to today.
 
         Returns:
@@ -481,7 +473,7 @@ class VaultClient:
         journal_path, full_path = self._journal_file(date)
         created = not full_path.exists()
         timestamp = self.get_local_datetime().strftime('%Y-%m-%d %H:%M')
-        note = f'{text}\n\n{timestamp}\n\n'
+        note = f'{text}\n\n{timestamp}\n\n\n'
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -489,12 +481,10 @@ class VaultClient:
             trailing = _trailing_newlines(existing)
 
             if not existing.strip():
-                mode, lead = 'w', f'\n\n{DAILY_NOTES_HEADING}\n\n'
-            elif not _DAILY_NOTES.search(existing):
-                # three line breaks end the last line and leave two blank lines
-                mode, lead = 'a', '\n' * max(0, 3 - trailing) + f'{DAILY_NOTES_HEADING}\n\n'
+                mode, lead = 'w', ''
             else:
-                mode, lead = 'a', '\n' * max(0, 2 - trailing)
+                # three line breaks end the last line and leave two blank lines
+                mode, lead = 'a', '\n' * max(0, 3 - trailing)
 
             with open(full_path, mode, encoding='utf-8', newline='') as f:
                 f.write(lead + note)

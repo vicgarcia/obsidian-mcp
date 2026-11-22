@@ -99,8 +99,8 @@ JOURNAL_FORMAT = '''
 journal files live at journal/YYYY/MM/YYYY-MM-DD.md, one file per day. never add a date
 heading or title to the file, obsidian handles this.
 
-a day's file has a # daily notes section that notes are added to through the day. other
-top-level (#) sections, such as a daily recap, go above it.
+notes are added to the end of a day's file through the day. anything that belongs above
+them, such as a daily recap, is prepended.
 
 dates:
 - before reading or writing the journal, call get_todays_date; don't rely on your own
@@ -109,15 +109,13 @@ dates:
   confirm the date with them and pass it explicitly as date (YYYY-MM-DD).
 
 adding a note, the usual way to write to the journal:
-- add_note_to_journal_entry appends a note to the # daily notes section, creating the file
-  and the section if needed, and stamps it with the time. never write the heading or a
-  timestamp yourself.
-- a note starts with a ### heading naming its topic. organize longer notes with ####
-  sections and ##### subsections, without skipping levels. never use # or ## headings in
-  a note.
+- add_note_to_journal_entry appends a note to the end of the file, creating the file if
+  needed, and stamps it with the time. never write a timestamp yourself.
+- a note must start with a ### heading naming its topic. organize longer notes with ####
+  sections and ##### subsections, without skipping levels.
 - the note is written exactly as you send it, so lay it out yourself: a blank line after
-  every heading, and a blank line before every heading after the first. the tool adds the
-  blank line and timestamp after the note. the full format is in the
+  every heading, and a blank line before every heading after the first. the tool adds a
+  blank line, the timestamp and two blank lines after the note. the full format is in the
   add_note_to_journal_entry description.
 - write in first person, natural voice, valuable to read months later. keep quick
   references (links, commands, snippets, todos) in a #### section inside the note.
@@ -382,7 +380,7 @@ def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str,
     Creates the file if it does not exist yet. YAML frontmatter stays first and the text
     goes right after it; all other existing content is kept unchanged below. Nothing is
     added between the text and what follows, so end the text with the newlines you need
-    (usually a blank line). Use it for sections above # daily notes, such as a recap.
+    (usually a blank line). Use it for sections above the notes, such as a recap.
 
     Args:
         text: Text to prepend, written byte for byte (markdown allowed)
@@ -413,17 +411,15 @@ def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str,
 @mcp.tool()
 def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
     '''
-    Add a note to the # daily notes section of a journal entry. This is the usual way to
-    write to the journal.
+    Add a note to the end of a journal entry. This is the usual way to write to the journal.
 
-    Creates the file with a # daily notes section if needed, then appends the note and
-    stamps it with the current time below it. Never write the # daily notes heading or a
-    timestamp yourself. Existing content is never changed.
+    Creates the file if needed, then appends the note and stamps it with the current time
+    below it. Never write a timestamp yourself. Existing content is never changed.
 
     The note is written exactly as you send it, spacing included, so send it in this
-    format: a ### heading naming the topic, a blank line, the content; for each section,
+    format: a ### heading naming the topic (required), a blank line, the content; for each section,
     a blank line, a #### heading, a blank line, its content (##### for subsections, the
-    same way). Never use # or ## headings. For example:
+    same way). For example:
 
         ### River trail run
 
@@ -434,7 +430,7 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
         - 5.2 miles, mostly flat
 
     The tool trims the ends of the note and then adds a blank line, the timestamp
-    (YYYY-MM-DD HH:MM) and a blank line, so don't end the note with blank lines.
+    (YYYY-MM-DD HH:MM) and two blank lines, so don't end the note with blank lines.
 
     Args:
         text: The note in the format above, starting with a ### heading (markdown allowed)

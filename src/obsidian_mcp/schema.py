@@ -83,17 +83,12 @@ class JournalTextInput(BaseModel):
         return None if self.date is None else datetime.strptime(self.date, '%Y-%m-%d')
 
 
-# a code fence opener or closer, and a # or ## heading (up to 3 spaces of indent is still a heading)
-_FENCE = re.compile(r'^ {0,3}(```|~~~)')
-_TOP_HEADING = re.compile(r'^ {0,3}#{1,2}(?:[ \t]|$)')
-
-
 class JournalNoteInput(BaseModel):
     '''
-    Input validation for adding a note to a journal entry's daily notes (date defaults to today).
+    Input validation for adding a note to a journal entry (date defaults to today).
 
-    The note is trimmed, must start with a ### heading, and can't hold # or ## headings
-    outside code blocks, which would break out of the # daily notes section.
+    The note is trimmed and must start with a ### heading. The rest of its layout is
+    guidance in the tool description, not checked here.
     '''
     text: str
     date: Optional[str] = None
@@ -106,12 +101,6 @@ class JournalNoteInput(BaseModel):
             raise ValueError('Note cannot be empty')
         if not v.startswith('### '):
             raise ValueError('Note must start with a ### heading')
-        fenced = False
-        for line in v.splitlines():
-            if _FENCE.match(line):
-                fenced = not fenced
-            elif not fenced and _TOP_HEADING.match(line):
-                raise ValueError('Note cannot contain # or ## headings, use #### and ##### within it')
         return v
 
     @field_validator('date')
