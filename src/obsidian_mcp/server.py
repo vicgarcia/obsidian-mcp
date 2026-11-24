@@ -197,9 +197,8 @@ def add_note_to_journal_entry(
     The tool trims the ends of the note and then adds a blank line, the timestamp
     (YYYY-MM-DD HH:MM) and two blank lines, so don't end the note with blank lines.
 
-    Returns:
-        Dictionary with success indicator, the entry path, whether it was created, and the
-        timestamp added
+    Returns a dictionary with success indicator, the entry path, whether it was created,
+    and the timestamp added.
     '''
     try:
         logger.debug(f'add_note_to_journal_entry called: date={date} ({len(text)} chars)')
@@ -225,8 +224,7 @@ def read_journal_entry(date: EntryDate) -> Dict[str, Any]:
     '''
     Read the journal entry for a specific date.
 
-    Returns:
-        Dictionary with the entry path, whether it exists, and its content
+    Returns a dictionary with the entry path, whether it exists, and its content.
     '''
     try:
         logger.debug(f'read_journal_entry called: date={date}')
@@ -276,9 +274,8 @@ def search_journal(
     date. When truncated is true, more notes matched than were returned; narrow the dates
     or the query rather than raising max_results.
 
-    Returns:
-        Dictionary with results (each with date, path, heading, timestamp, snippet),
-        total_matches, truncated, and entries_searched
+    Returns a dictionary with results (each with date, path, heading, timestamp, snippet),
+    total_matches, truncated, and entries_searched.
     '''
     try:
         logger.debug(f'search_journal called: query={query!r}, start={start_date}, end={end_date}')
@@ -316,12 +313,12 @@ def get_todays_date() -> Dict[str, Any]:
     journal tools. Check the time too: after midnight the user may still mean the
     previous day.
 
-    Returns:
-        Dictionary with:
-            date: YYYY-MM-DD, the format journal tools take (2026-11-14)
-            time: 12-hour time with AM or PM (2:32 PM)
-            day_of_week: weekday name (Saturday)
-            timezone: timezone name (America/New_York)
+    Returns a dictionary with:
+
+        date: YYYY-MM-DD, the format journal tools take (2026-11-14)
+        time: 12-hour time with AM or PM (2:32 PM)
+        day_of_week: weekday name (Saturday)
+        timezone: timezone name (America/New_York)
     '''
     try:
         logger.debug('get_todays_date called')
@@ -352,8 +349,7 @@ def list_journal_entries_by_year_and_month(
     List all journal entries for a specific year and month.
     Journal entries are organized as journal/YYYY/MM/YYYY-MM-DD.md.
 
-    Returns:
-        List of journal entries with metadata
+    Returns a list of journal entries with metadata.
     '''
     try:
         logger.debug(f'list_journal_entries_by_year_and_month called: year={year}, month={month}')
@@ -389,8 +385,8 @@ def prepend_to_journal_entry(
     added between the text and what follows, so end the text with the newlines you need
     (usually a blank line). Use it for sections above the notes, such as a recap.
 
-    Returns:
-        Dictionary with success indicator, the entry path, and whether it was created
+    Returns a dictionary with success indicator, the entry path, and whether it was
+    created.
     '''
     try:
         logger.debug(f'prepend_to_journal_entry called: date={date} ({len(text)} chars)')
@@ -425,8 +421,8 @@ def append_to_journal_entry(
     Nothing is added: no blank line before the text and no newline after it, so include
     the newlines you need. To add a note, use add_note_to_journal_entry instead.
 
-    Returns:
-        Dictionary with success indicator, the entry path, and whether it was created
+    Returns a dictionary with success indicator, the entry path, and whether it was
+    created.
     '''
     try:
         logger.debug(f'append_to_journal_entry called: date={date} ({len(text)} chars)')
@@ -461,8 +457,8 @@ def write_journal_entry(
     Use this only to edit or reorganize existing content; to add a note, use
     add_note_to_journal_entry, which never touches existing content.
 
-    Returns:
-        Dictionary with success indicator, the entry path, and whether it was created
+    Returns a dictionary with success indicator, the entry path, and whether it was
+    created.
     '''
     try:
         logger.debug(f'write_journal_entry called: date={date} ({len(content)} chars)')
@@ -494,8 +490,7 @@ def list_projects() -> List[Dict[str, str]]:
     project names (e.g., "home automation", "blog redesign") and organize related
     documentation within each project directory.
 
-    Returns:
-        List of project directories with metadata
+    Returns a list of project directories with metadata.
     '''
     try:
         logger.debug('list_projects called')
@@ -516,8 +511,7 @@ def list_project_content(
     '''
     List all files and directories within a project.
 
-    Returns:
-        List of files and directories with metadata
+    Returns a list of files and directories with metadata.
     '''
     try:
         logger.debug(f'list_project_content called: project={project}')
@@ -546,8 +540,7 @@ def create_project(
     '''
     Create a new project directory.
 
-    Returns:
-        Success indicator or error message
+    Returns a success indicator or error message.
     '''
     try:
         logger.debug(f'create_project called: project={project}')
@@ -579,8 +572,7 @@ def list_wiki() -> List[Dict[str, str]]:
     descriptive filenames with spaces in lowercase (e.g., "python asyncio.md", "docker
     networking.md") in a flat directory structure for easy discovery.
 
-    Returns:
-        List of markdown files with metadata
+    Returns a list of markdown files with metadata.
     '''
     try:
         logger.debug('list_wiki called')
@@ -605,8 +597,7 @@ def read_file(
     '''
     Read file content from the Obsidian vault.
 
-    Returns:
-        Dictionary with file content or error message
+    Returns a dictionary with file content or error message.
     '''
     try:
         logger.debug(f'read_file called with path: {file_path}')
@@ -640,8 +631,7 @@ def write_file(
     For journal files, use write_journal_entry, append_to_journal_entry, or
     prepend_to_journal_entry instead.
 
-    Returns:
-        Dictionary with success indicator or error message
+    Returns a dictionary with success indicator or error message.
     '''
     try:
         logger.debug(f'write_file called with path: {file_path} ({len(content)} chars)')

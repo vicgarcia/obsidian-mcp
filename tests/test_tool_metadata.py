@@ -73,3 +73,10 @@ def test_instructions_cover_projects_and_the_wiki():
     for tool in ('list_project_content', 'list_wiki', 'read_file', 'write_file'):
         assert tool in instructions
     assert 'documented' in instructions
+
+
+def test_descriptions_say_what_each_tool_returns(tools):
+    # in prose, not a Returns: section, which fastmcp 4 strips from descriptions
+    for tool in tools:
+        assert 'Returns ' in tool.description, tool.name
+        assert 'Returns:' not in tool.description, tool.name
