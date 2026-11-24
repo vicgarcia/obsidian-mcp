@@ -64,7 +64,7 @@ replace `/path/to/your/vault` with the absolute path to your obsidian vault
 
 ## tools
 
-this mcp server exposes 14 tools to interact with your obsidian vault.
+this mcp server exposes 14 tools to interact with your obsidian vault. every tool is annotated as read-only, adding content, or replacing content, and every argument has a description, so clients can decide when to ask before a call. tools are listed with the usual ones first, starting with add_note_to_journal_entry.
 
 #### read_file / write_file
 
@@ -208,7 +208,7 @@ manage project directories in your vault
 
 #### list_wiki
 
-list all wiki articles in the wiki directory
+list all wiki articles in the wiki directory. the server instructions explain that list_project_content and list_wiki give the paths read_file and write_file take
 
 <sub>example usage with agent:</sub>
 > "list my wiki articles"
@@ -244,6 +244,7 @@ obsidian-mcp/
 │   ├── test_vault_client.py
 │   ├── test_tools.py
 │   ├── test_search.py
+│   ├── test_tool_metadata.py
 │   └── test_integration.py
 ├── pyproject.toml
 └── README.md

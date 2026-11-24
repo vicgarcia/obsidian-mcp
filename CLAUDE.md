@@ -20,6 +20,7 @@ obsidian-mcp/
 │   ├── test_vault_client.py  # vault client tests
 │   ├── test_tools.py         # MCP tool tests
 │   ├── test_search.py        # journal search tests
+│   ├── test_tool_metadata.py # tool order, annotations, argument descriptions
 │   └── test_integration.py   # integration tests
 ├── pyproject.toml            # package metadata and dependencies
 ├── README.md                 # user-facing documentation
@@ -63,7 +64,9 @@ Fourteen core MCP tools (see README.md for full documentation):
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
 
-Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: `###` notes (`####` / `#####` within) appended through the day, with sections such as a recap prepended above them. Every journal write uses `newline=''` so files stay LF on Windows.
+Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: `###` notes (`####` / `#####` within) appended through the day, with sections such as a recap prepended above them. It ends with a short section on projects and the wiki (which paths `read_file` / `write_file` take, and that documenting something means the journal plus a project file).
+
+What clients see about each tool is set in server.py, not left to a gateway: tools are defined in the order they are listed (usual ones first, `add_note_to_journal_entry` at the top); every tool has `ToolAnnotations` (`READ_ONLY`, `ADDS` = not destructive, `REPLACES` = destructive, all `openWorldHint=False`); every argument is `Annotated[..., Field(description=...)]`, so docstrings carry no `Args:` block. `test_tool_metadata.py` enforces all three. Every journal write uses `newline=''` so files stay LF on Windows.
 
 ## Implementation Notes
 
@@ -98,7 +101,7 @@ Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed 
 
 #### server.py (MCP Server)
 - FastMCP server initialization
-- 14 `@mcp.tool()` definitions
+- 14 `@mcp.tool(annotations=...)` definitions, in the order clients list them
 - Module-level client singleton
 - Entry point `run()` function
 
