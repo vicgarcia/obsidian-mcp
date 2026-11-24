@@ -11,10 +11,12 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import ValidationError
+from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
+from pydantic import Field, ValidationError
 
 from obsidian_mcp.schema import (
     FilePathInput,
@@ -26,7 +28,6 @@ from obsidian_mcp.schema import (
     JournalWriteInput,
     ProjectInput,
     YearMonthInput,
-    create_error_response,
     create_success_response,
 )
 from obsidian_mcp.vault_client import VaultClient, VaultError
@@ -84,17 +85,24 @@ def redact_vault_path(message: str) -> str:
     return message
 
 
-def error_response(message: str) -> Dict[str, Any]:
-    '''An error response, with the vault's location removed.'''
-    return create_error_response(redact_vault_path(message))
+def tool_error(message: str) -> ToolError:
+    '''
+    A tool error to raise, so the client sees the call failed, with the vault's location removed.
+    '''
+    return ToolError(redact_vault_path(message))
 
 
-def format_error(error: Exception) -> Dict[str, Any]:
-    '''Format an exception as an error response.'''
-    return error_response(str(error))
+def invalid_input(error: ValidationError) -> str:
+    '''A short message for a validation error: each problem and its argument, without pydantic's links.'''
+    problems = []
+    for item in error.errors():
+        field = '.'.join(str(part) for part in item['loc'])
+        message = item['msg'].removeprefix('Value error, ')
+        problems.append(f'{field}: {message}' if field else message)
+    return 'Invalid input: ' + '; '.join(problems)
 
 
-# journal format guidance, sent to clients as the server instructions
+# guidance sent to clients as the server instructions: the journal format, then projects and the wiki
 
 JOURNAL_FORMAT = '''
 journal files live at journal/YYYY/MM/YYYY-MM-DD.md, one file per day. never add a date
@@ -134,288 +142,46 @@ finding past notes:
 - search_journal finds notes containing every word in the query, newest first, and
   returns snippets. use it when the user asks about something they wrote before but
   doesn't give the date, then read_journal_entry for the full day.
+
+projects and the wiki:
+- projects are folders of notes for ongoing work. list_project_content gives the paths
+  that read_file and write_file take.
+- the wiki is a set of standalone articles. list_wiki gives the paths that read_file takes.
+- when the user asks for something to be documented, add it to the journal and to a
+  project file, reading an existing file first.
 '''
 
-# mcp server
+# tool annotations: whether a tool only reads, and whether a write can overwrite or remove
+# existing content. every tool works on the vault alone, so none is open world.
+
+READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+ADDS = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
+REPLACES = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
+
+# argument descriptions shared by several tools
+
+EntryDate = Annotated[str, Field(description='the day, as YYYY-MM-DD')]
+OptionalEntryDate = Annotated[
+    Optional[str], Field(description='the day, as YYYY-MM-DD; today if left out')
+]
+
+# mcp server; tools are listed to clients in the order they are defined, the usual ones first
 
 mcp = FastMCP('Obsidian MCP', instructions=JOURNAL_FORMAT)
 
 
-# file tools
-
-@mcp.tool()
-def read_file(file_path: str) -> Dict[str, Any]:
-    '''
-    Read file content from the Obsidian vault.
-
-    Args:
-        file_path: Vault-relative path to the file
-
-    Returns:
-        Dictionary with file content or error message
-    '''
-    try:
-        logger.debug(f'read_file called with path: {file_path}')
-        validated_input = FilePathInput(file_path=file_path)
-
-        with get_client() as vault:
-            content = vault.read_file(validated_input.file_path)
-            return {'content': content}
-
-    except ValidationError as e:
-        logger.error(f'validation error reading file: {e}')
-        return error_response(f'Invalid input: {e}')
-    except VaultError as e:
-        logger.error(f'vault error reading file: {e}')
-        return format_error(e)
-    except Exception as e:
-        logger.exception(f'unexpected error reading file: {e}')
-        return error_response(f'Unexpected error reading file: {e}')
-
-
-@mcp.tool()
-def write_file(file_path: str, content: str) -> Dict[str, Any]:
-    '''
-    Write content to a file in the Obsidian vault.
-    It's good practice to read from a file before writing to ensure nothing is overwritten.
-    For journal files, use write_journal_entry, append_to_journal_entry, or
-    prepend_to_journal_entry instead.
-
-    Args:
-        file_path: Vault-relative path to the file
-        content: Content to write to the file
-
-    Returns:
-        Dictionary with success indicator or error message
-    '''
-    try:
-        logger.debug(f'write_file called with path: {file_path} ({len(content)} chars)')
-        validated_input = FileWriteInput(file_path=file_path, content=content)
-
-        with get_client() as vault:
-            vault.write_file(validated_input.file_path, validated_input.content)
-            return create_success_response()
-
-    except ValidationError as e:
-        logger.error(f'validation error writing file: {e}')
-        return error_response(f'Invalid input: {e}')
-    except VaultError as e:
-        logger.error(f'vault error writing file: {e}')
-        return format_error(e)
-    except Exception as e:
-        logger.exception(f'unexpected error writing file: {e}')
-        return error_response(f'Unexpected error writing file: {e}')
-
-
-# date tools
-
-@mcp.tool()
-def get_todays_date() -> Dict[str, Any]:
-    '''
-    Get today's date and the current time in the user's timezone (TZ).
-
-    This is the source of truth for "today". Call it before reading or writing a journal
-    entry instead of relying on your own sense of the date; pass its date field to the
-    journal tools. Check the time too: after midnight the user may still mean the
-    previous day.
-
-    Returns:
-        Dictionary with:
-            date: YYYY-MM-DD, the format journal tools take (2026-11-14)
-            time: 12-hour time with AM or PM (2:32 PM)
-            day_of_week: weekday name (Saturday)
-            timezone: timezone name (America/New_York)
-    '''
-    try:
-        logger.debug('get_todays_date called')
-        with get_client() as vault:
-            now = vault.get_local_datetime()
-        result = {
-            'date': now.strftime('%Y-%m-%d'),
-            # built by hand: %p follows the system locale, which may not say AM/PM
-            'time': f"{now.hour % 12 or 12}:{now.minute:02d} {'AM' if now.hour < 12 else 'PM'}",
-            'day_of_week': now.strftime('%A'),
-            'timezone': os.getenv('TZ') or now.tzname() or '',
-        }
-        logger.info(f"today's date: {result['date']} {result['time']} ({result['timezone']})")
-        return result
-    except Exception as e:
-        logger.exception(f"unexpected error getting today's date: {e}")
-        return error_response(f"Unexpected error getting today's date: {e}")
-
-
 # journal tools
 
-@mcp.tool()
-def list_journal_entries_by_year_and_month(year: str, month: str) -> List[Dict[str, str]]:
-    '''
-    List all journal entries for a specific year and month.
-    Journal entries are organized as journal/YYYY/MM/YYYY-MM-DD.md.
-
-    Args:
-        year: Year in YYYY format (e.g., "2025")
-        month: Month in MM format with leading zero (e.g., "01" for January, "10" for October)
-
-    Returns:
-        List of journal entries with metadata
-    '''
-    try:
-        logger.debug(f'list_journal_entries_by_year_and_month called: year={year}, month={month}')
-        validated_input = YearMonthInput(year=year, month=month)
-
-        with get_client() as vault:
-            entries = vault.list_journal_entries(validated_input.year, validated_input.month)
-            return entries
-
-    except ValidationError as e:
-        logger.error(f'validation error listing journal entries: {e}')
-        return [error_response(f'Invalid input: {e}')]
-    except VaultError as e:
-        logger.error(f'vault error listing journal entries: {e}')
-        return [format_error(e)]
-    except Exception as e:
-        logger.exception(f'unexpected error listing journal entries: {e}')
-        return [error_response(f'Unexpected error listing journal entries: {e}')]
-
-
-@mcp.tool()
-def read_journal_entry(date: str) -> Dict[str, Any]:
-    '''
-    Read the journal entry for a specific date.
-
-    Args:
-        date: Date in YYYY-MM-DD format (e.g., "2025-10-27")
-
-    Returns:
-        Dictionary with the entry path, whether it exists, and its content
-    '''
-    try:
-        logger.debug(f'read_journal_entry called: date={date}')
-        validated_input = JournalDateInput(date=date)
-        entry_date = datetime.strptime(validated_input.date, '%Y-%m-%d')
-
-        with get_client() as vault:
-            return vault.read_journal_entry(entry_date)
-
-    except ValidationError as e:
-        logger.error(f'validation error reading journal entry: {e}')
-        return error_response(f'Invalid input: {e}')
-    except VaultError as e:
-        logger.error(f'vault error reading journal entry: {e}')
-        return format_error(e)
-    except Exception as e:
-        logger.exception(f'unexpected error reading journal entry: {e}')
-        return error_response(f'Unexpected error reading journal entry: {e}')
-
-
-@mcp.tool()
-def write_journal_entry(content: str, date: Optional[str] = None) -> Dict[str, Any]:
-    '''
-    Replace the whole content of a journal entry file, creating it if needed.
-
-    Read the entry first with read_journal_entry and keep everything you aren't changing.
-    Use this only to edit or reorganize existing content; to add a note, use
-    add_note_to_journal_entry, which never touches existing content.
-
-    Args:
-        content: Full markdown content of the file
-        date: Date in YYYY-MM-DD format (defaults to today)
-
-    Returns:
-        Dictionary with success indicator, the entry path, and whether it was created
-    '''
-    try:
-        logger.debug(f'write_journal_entry called: date={date} ({len(content)} chars)')
-        validated_input = JournalWriteInput(content=content, date=date)
-
-        with get_client() as vault:
-            result = vault.write_journal_entry(validated_input.content, validated_input.entry_date())
-            return {**create_success_response(), **result}
-
-    except ValidationError as e:
-        logger.error(f'validation error writing journal entry: {e}')
-        return error_response(f'Invalid input: {e}')
-    except VaultError as e:
-        logger.error(f'vault error writing journal entry: {e}')
-        return format_error(e)
-    except Exception as e:
-        logger.exception(f'unexpected error writing journal entry: {e}')
-        return error_response(f'Unexpected error writing journal entry: {e}')
-
-
-@mcp.tool()
-def append_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
-    '''
-    Append text to the end of a journal entry file, exactly as given.
-
-    Creates the file if it does not exist yet. Existing content is never changed.
-    Nothing is added: no blank line before the text and no newline after it, so include
-    the newlines you need. To add a note, use add_note_to_journal_entry instead.
-
-    Args:
-        text: Text to append, written byte for byte (markdown allowed)
-        date: Date in YYYY-MM-DD format (defaults to today)
-
-    Returns:
-        Dictionary with success indicator, the entry path, and whether it was created
-    '''
-    try:
-        logger.debug(f'append_to_journal_entry called: date={date} ({len(text)} chars)')
-        validated_input = JournalTextInput(text=text, date=date)
-
-        with get_client() as vault:
-            result = vault.append_to_journal(validated_input.text, validated_input.entry_date())
-            return {**create_success_response(), **result}
-
-    except ValidationError as e:
-        logger.error(f'validation error appending to journal: {e}')
-        return error_response(f'Invalid input: {e}')
-    except VaultError as e:
-        logger.error(f'vault error appending to journal: {e}')
-        return format_error(e)
-    except Exception as e:
-        logger.exception(f'unexpected error appending to journal: {e}')
-        return error_response(f'Unexpected error appending to journal: {e}')
-
-
-@mcp.tool()
-def prepend_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
-    '''
-    Insert text at the top of a journal entry file, exactly as given.
-
-    Creates the file if it does not exist yet. YAML frontmatter stays first and the text
-    goes right after it; all other existing content is kept unchanged below. Nothing is
-    added between the text and what follows, so end the text with the newlines you need
-    (usually a blank line). Use it for sections above the notes, such as a recap.
-
-    Args:
-        text: Text to prepend, written byte for byte (markdown allowed)
-        date: Date in YYYY-MM-DD format (defaults to today)
-
-    Returns:
-        Dictionary with success indicator, the entry path, and whether it was created
-    '''
-    try:
-        logger.debug(f'prepend_to_journal_entry called: date={date} ({len(text)} chars)')
-        validated_input = JournalTextInput(text=text, date=date)
-
-        with get_client() as vault:
-            result = vault.prepend_to_journal(validated_input.text, validated_input.entry_date())
-            return {**create_success_response(), **result}
-
-    except ValidationError as e:
-        logger.error(f'validation error prepending to journal: {e}')
-        return error_response(f'Invalid input: {e}')
-    except VaultError as e:
-        logger.error(f'vault error prepending to journal: {e}')
-        return format_error(e)
-    except Exception as e:
-        logger.exception(f'unexpected error prepending to journal: {e}')
-        return error_response(f'Unexpected error prepending to journal: {e}')
-
-
-@mcp.tool()
-def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str, Any]:
+@mcp.tool(title="Add a journal note", annotations=ADDS)
+def add_note_to_journal_entry(
+    text: Annotated[str, Field(
+        description='the note, starting with a ### heading, laid out as the description shows'
+    )],
+    date: Annotated[Optional[str], Field(
+        description='the day, as YYYY-MM-DD; today if left out. pass the previous day when '
+                    'the user is still on it after midnight'
+    )] = None,
+) -> Dict[str, Any]:
     '''
     Add a note to the end of a journal entry. This is the usual way to write to the journal.
 
@@ -438,14 +204,8 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
     The tool trims the ends of the note and then adds a blank line, the timestamp
     (YYYY-MM-DD HH:MM) and two blank lines, so don't end the note with blank lines.
 
-    Args:
-        text: The note in the format above, starting with a ### heading (markdown allowed)
-        date: Date in YYYY-MM-DD format (defaults to today). Pass the previous day when the
-            user is still on it after midnight.
-
-    Returns:
-        Dictionary with success indicator, the entry path, whether it was created, and the
-        timestamp added
+    Returns a dictionary with success indicator, the entry path, whether it was created,
+    and the timestamp added.
     '''
     try:
         logger.debug(f'add_note_to_journal_entry called: date={date} ({len(text)} chars)')
@@ -457,21 +217,55 @@ def add_note_to_journal_entry(text: str, date: Optional[str] = None) -> Dict[str
 
     except ValidationError as e:
         logger.error(f'validation error adding note to journal: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error adding note to journal: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error adding note to journal: {e}')
-        return error_response(f'Unexpected error adding note to journal: {e}')
+        raise tool_error(f'Unexpected error adding note to journal: {e}')
 
 
-@mcp.tool()
+@mcp.tool(title="Read a journal entry", annotations=READ_ONLY)
+def read_journal_entry(date: EntryDate) -> Dict[str, Any]:
+    '''
+    Read the journal entry for a specific date.
+
+    Returns a dictionary with the entry path, whether it exists, and its content.
+    '''
+    try:
+        logger.debug(f'read_journal_entry called: date={date}')
+        validated_input = JournalDateInput(date=date)
+        entry_date = datetime.strptime(validated_input.date, '%Y-%m-%d')
+
+        with get_client() as vault:
+            return vault.read_journal_entry(entry_date)
+
+    except ValidationError as e:
+        logger.error(f'validation error reading journal entry: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error reading journal entry: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error reading journal entry: {e}')
+        raise tool_error(f'Unexpected error reading journal entry: {e}')
+
+
+@mcp.tool(title="Search the journal", annotations=READ_ONLY)
 def search_journal(
-    query: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    max_results: int = 20,
+    query: Annotated[str, Field(
+        description="words to find, e.g. 'dentist insurance' or '\"river trail\" run'"
+    )],
+    start_date: Annotated[Optional[str], Field(
+        description='the earliest entry date to search, as YYYY-MM-DD; no limit if left out'
+    )] = None,
+    end_date: Annotated[Optional[str], Field(
+        description='the latest entry date to search, as YYYY-MM-DD; no limit if left out'
+    )] = None,
+    max_results: Annotated[int, Field(
+        description='the most notes to return, from 1 to 50'
+    )] = 20,
 ) -> Dict[str, Any]:
     '''
     Search journal notes by keyword, newest first.
@@ -487,15 +281,8 @@ def search_journal(
     date. When truncated is true, more notes matched than were returned; narrow the dates
     or the query rather than raising max_results.
 
-    Args:
-        query: Words to find, e.g. 'dentist insurance' or '"river trail" run'
-        start_date: Earliest entry date to search, YYYY-MM-DD (optional)
-        end_date: Latest entry date to search, YYYY-MM-DD (optional)
-        max_results: Most notes to return, 1 to 50 (default 20)
-
-    Returns:
-        Dictionary with results (each with date, path, heading, timestamp, snippet),
-        total_matches, truncated, and entries_searched
+    Returns a dictionary with results (each with date, path, heading, timestamp, snippet),
+    total_matches, truncated, and entries_searched.
     '''
     try:
         logger.debug(f'search_journal called: query={query!r}, start={start_date}, end={end_date}')
@@ -514,18 +301,194 @@ def search_journal(
 
     except ValidationError as e:
         logger.error(f'validation error searching journal: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error searching journal: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error searching journal: {e}')
-        return error_response(f'Unexpected error searching journal: {e}')
+        raise tool_error(f'Unexpected error searching journal: {e}')
+
+
+@mcp.tool(title="Get today's date", annotations=READ_ONLY)
+def get_todays_date() -> Dict[str, Any]:
+    '''
+    Get today's date and the current time in the user's timezone (TZ).
+
+    This is the source of truth for "today". Call it before reading or writing a journal
+    entry instead of relying on your own sense of the date; pass its date field to the
+    journal tools. Check the time too: after midnight the user may still mean the
+    previous day.
+
+    Returns a dictionary with:
+
+        date: YYYY-MM-DD, the format journal tools take (2026-11-14)
+        time: 12-hour time with AM or PM (2:32 PM)
+        day_of_week: weekday name (Saturday)
+        timezone: timezone name (America/New_York)
+    '''
+    try:
+        logger.debug('get_todays_date called')
+        with get_client() as vault:
+            now = vault.get_local_datetime()
+        result = {
+            'date': now.strftime('%Y-%m-%d'),
+            # built by hand: %p follows the system locale, which may not say AM/PM
+            'time': f"{now.hour % 12 or 12}:{now.minute:02d} {'AM' if now.hour < 12 else 'PM'}",
+            'day_of_week': now.strftime('%A'),
+            'timezone': os.getenv('TZ') or now.tzname() or '',
+        }
+        logger.info(f"today's date: {result['date']} {result['time']} ({result['timezone']})")
+        return result
+    except Exception as e:
+        logger.exception(f"unexpected error getting today's date: {e}")
+        raise tool_error(f"Unexpected error getting today's date: {e}")
+
+
+@mcp.tool(title="List journal entries for a month", annotations=READ_ONLY)
+def list_journal_entries_by_year_and_month(
+    year: Annotated[str, Field(description='the year, as YYYY, e.g. "2025"')],
+    month: Annotated[str, Field(
+        description='the month, as MM with a leading zero, e.g. "01" for January'
+    )],
+) -> List[Dict[str, str]]:
+    '''
+    List all journal entries for a specific year and month.
+    Journal entries are organized as journal/YYYY/MM/YYYY-MM-DD.md.
+
+    Returns a list of journal entries with metadata.
+    '''
+    try:
+        logger.debug(f'list_journal_entries_by_year_and_month called: year={year}, month={month}')
+        validated_input = YearMonthInput(year=year, month=month)
+
+        with get_client() as vault:
+            entries = vault.list_journal_entries(validated_input.year, validated_input.month)
+            return entries
+
+    except ValidationError as e:
+        logger.error(f'validation error listing journal entries: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error listing journal entries: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error listing journal entries: {e}')
+        raise tool_error(f'Unexpected error listing journal entries: {e}')
+
+
+@mcp.tool(title="Prepend to a journal entry", annotations=ADDS)
+def prepend_to_journal_entry(
+    text: Annotated[str, Field(
+        description='the text, written exactly as given; end it with a blank line'
+    )],
+    date: OptionalEntryDate = None,
+) -> Dict[str, Any]:
+    '''
+    Insert text at the top of a journal entry file, exactly as given.
+
+    Creates the file if it does not exist yet. YAML frontmatter stays first and the text
+    goes right after it; all other existing content is kept unchanged below. Nothing is
+    added between the text and what follows, so end the text with the newlines you need
+    (usually a blank line). Use it for sections above the notes, such as a recap.
+
+    Returns a dictionary with success indicator, the entry path, and whether it was
+    created.
+    '''
+    try:
+        logger.debug(f'prepend_to_journal_entry called: date={date} ({len(text)} chars)')
+        validated_input = JournalTextInput(text=text, date=date)
+
+        with get_client() as vault:
+            result = vault.prepend_to_journal(validated_input.text, validated_input.entry_date())
+            return {**create_success_response(), **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error prepending to journal: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error prepending to journal: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error prepending to journal: {e}')
+        raise tool_error(f'Unexpected error prepending to journal: {e}')
+
+
+@mcp.tool(title="Append to a journal entry", annotations=ADDS)
+def append_to_journal_entry(
+    text: Annotated[str, Field(
+        description='the text, written exactly as given; include the newlines you need'
+    )],
+    date: OptionalEntryDate = None,
+) -> Dict[str, Any]:
+    '''
+    Append text to the end of a journal entry file, exactly as given.
+
+    Creates the file if it does not exist yet. Existing content is never changed.
+    Nothing is added: no blank line before the text and no newline after it, so include
+    the newlines you need. To add a note, use add_note_to_journal_entry instead.
+
+    Returns a dictionary with success indicator, the entry path, and whether it was
+    created.
+    '''
+    try:
+        logger.debug(f'append_to_journal_entry called: date={date} ({len(text)} chars)')
+        validated_input = JournalTextInput(text=text, date=date)
+
+        with get_client() as vault:
+            result = vault.append_to_journal(validated_input.text, validated_input.entry_date())
+            return {**create_success_response(), **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error appending to journal: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error appending to journal: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error appending to journal: {e}')
+        raise tool_error(f'Unexpected error appending to journal: {e}')
+
+
+@mcp.tool(title="Replace a journal entry", annotations=REPLACES)
+def write_journal_entry(
+    content: Annotated[str, Field(
+        description="the whole file, everything you aren't changing included"
+    )],
+    date: OptionalEntryDate = None,
+) -> Dict[str, Any]:
+    '''
+    Replace the whole content of a journal entry file, creating it if needed.
+
+    Read the entry first with read_journal_entry and keep everything you aren't changing.
+    Use this only to edit or reorganize existing content; to add a note, use
+    add_note_to_journal_entry, which never touches existing content.
+
+    Returns a dictionary with success indicator, the entry path, and whether it was
+    created.
+    '''
+    try:
+        logger.debug(f'write_journal_entry called: date={date} ({len(content)} chars)')
+        validated_input = JournalWriteInput(content=content, date=date)
+
+        with get_client() as vault:
+            result = vault.write_journal_entry(validated_input.content, validated_input.entry_date())
+            return {**create_success_response(), **result}
+
+    except ValidationError as e:
+        logger.error(f'validation error writing journal entry: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error writing journal entry: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error writing journal entry: {e}')
+        raise tool_error(f'Unexpected error writing journal entry: {e}')
 
 
 # project tools
 
-@mcp.tool()
+@mcp.tool(title="List projects", annotations=READ_ONLY)
 def list_projects() -> List[Dict[str, str]]:
     '''
     List all projects (subdirectories in the projects directory).
@@ -534,8 +497,7 @@ def list_projects() -> List[Dict[str, str]]:
     project names (e.g., "home automation", "blog redesign") and organize related
     documentation within each project directory.
 
-    Returns:
-        List of project directories with metadata
+    Returns a list of project directories with metadata.
     '''
     try:
         logger.debug('list_projects called')
@@ -543,22 +505,20 @@ def list_projects() -> List[Dict[str, str]]:
             return vault.list_projects()
     except VaultError as e:
         logger.error(f'vault error listing projects: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing projects: {e}')
-        return [error_response(f'Unexpected error listing projects: {e}')]
+        raise tool_error(f'Unexpected error listing projects: {e}')
 
 
-@mcp.tool()
-def list_project_content(project: str) -> List[Dict[str, str]]:
+@mcp.tool(title="List a project's files", annotations=READ_ONLY)
+def list_project_content(
+    project: Annotated[str, Field(description='the project name, from list_projects')],
+) -> List[Dict[str, str]]:
     '''
     List all files and directories within a project.
 
-    Args:
-        project: Name of the project directory
-
-    Returns:
-        List of files and directories with metadata
+    Returns a list of files and directories with metadata.
     '''
     try:
         logger.debug(f'list_project_content called: project={project}')
@@ -569,25 +529,25 @@ def list_project_content(project: str) -> List[Dict[str, str]]:
 
     except ValidationError as e:
         logger.error(f'validation error listing project content: {e}')
-        return [error_response(f'Invalid input: {e}')]
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error listing project content: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing project content: {e}')
-        return [error_response(f'Unexpected error listing project content: {e}')]
+        raise tool_error(f'Unexpected error listing project content: {e}')
 
 
-@mcp.tool()
-def create_project(project: str) -> Dict[str, Any]:
+@mcp.tool(title="Create a project", annotations=ADDS)
+def create_project(
+    project: Annotated[str, Field(
+        description='the new project name, lowercase words with spaces'
+    )],
+) -> Dict[str, Any]:
     '''
     Create a new project directory.
 
-    Args:
-        project: Name of the project directory to create
-
-    Returns:
-        Success indicator or error message
+    Returns a success indicator or error message.
     '''
     try:
         logger.debug(f'create_project called: project={project}')
@@ -599,18 +559,18 @@ def create_project(project: str) -> Dict[str, Any]:
 
     except ValidationError as e:
         logger.error(f'validation error creating project: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error creating project: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error creating project: {e}')
-        return error_response(f'Unexpected error creating project: {e}')
+        raise tool_error(f'Unexpected error creating project: {e}')
 
 
 # wiki tools
 
-@mcp.tool()
+@mcp.tool(title="List wiki articles", annotations=READ_ONLY)
 def list_wiki() -> List[Dict[str, str]]:
     '''
     List all wiki articles in the obsidian wiki.
@@ -619,8 +579,7 @@ def list_wiki() -> List[Dict[str, str]]:
     descriptive filenames with spaces in lowercase (e.g., "python asyncio.md", "docker
     networking.md") in a flat directory structure for easy discovery.
 
-    Returns:
-        List of markdown files with metadata
+    Returns a list of markdown files with metadata.
     '''
     try:
         logger.debug('list_wiki called')
@@ -628,10 +587,76 @@ def list_wiki() -> List[Dict[str, str]]:
             return vault.list_wiki()
     except VaultError as e:
         logger.error(f'vault error listing wiki: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing wiki: {e}')
-        return [error_response(f'Unexpected error listing wiki: {e}')]
+        raise tool_error(f'Unexpected error listing wiki: {e}')
+
+
+# file tools
+
+@mcp.tool(title="Read a vault file", annotations=READ_ONLY)
+def read_file(
+    file_path: Annotated[str, Field(
+        description='the vault-relative path, from list_project_content or list_wiki'
+    )],
+) -> Dict[str, Any]:
+    '''
+    Read file content from the Obsidian vault.
+
+    Returns a dictionary with file content or error message.
+    '''
+    try:
+        logger.debug(f'read_file called with path: {file_path}')
+        validated_input = FilePathInput(file_path=file_path)
+
+        with get_client() as vault:
+            content = vault.read_file(validated_input.file_path)
+            return {'content': content}
+
+    except ValidationError as e:
+        logger.error(f'validation error reading file: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error reading file: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error reading file: {e}')
+        raise tool_error(f'Unexpected error reading file: {e}')
+
+
+@mcp.tool(title="Write a vault file", annotations=REPLACES)
+def write_file(
+    file_path: Annotated[str, Field(
+        description='the vault-relative path; read the file first if it exists'
+    )],
+    content: Annotated[str, Field(description='the whole file, replacing what is there')],
+) -> Dict[str, Any]:
+    '''
+    Write content to a file in the Obsidian vault.
+    It's good practice to read from a file before writing to ensure nothing is overwritten.
+    For journal files, use write_journal_entry, append_to_journal_entry, or
+    prepend_to_journal_entry instead.
+
+    Returns a dictionary with success indicator or error message.
+    '''
+    try:
+        logger.debug(f'write_file called with path: {file_path} ({len(content)} chars)')
+        validated_input = FileWriteInput(file_path=file_path, content=content)
+
+        with get_client() as vault:
+            vault.write_file(validated_input.file_path, validated_input.content)
+            return create_success_response()
+
+    except ValidationError as e:
+        logger.error(f'validation error writing file: {e}')
+        raise tool_error(invalid_input(e))
+    except VaultError as e:
+        logger.error(f'vault error writing file: {e}')
+        raise tool_error(str(e))
+    except Exception as e:
+        logger.exception(f'unexpected error writing file: {e}')
+        raise tool_error(f'Unexpected error writing file: {e}')
 
 
 # entry point

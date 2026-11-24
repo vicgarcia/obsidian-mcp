@@ -288,11 +288,6 @@ class ProjectInput(BaseModel):
         return v
 
 
-def create_error_response(message: str) -> Dict[str, Any]:
-    '''Create a standardized error response.'''
-    return {'error': message, 'success': False}
-
-
 def create_success_response() -> Dict[str, bool]:
     '''Create a standardized success response.'''
     return {'success': True}

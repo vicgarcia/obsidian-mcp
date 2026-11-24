@@ -12,6 +12,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from obsidian_mcp.vault_client import VaultClient
+from mcp.server.fastmcp.exceptions import ToolError
+
 from obsidian_mcp import server
 
 
@@ -34,15 +36,13 @@ class TestFileTools:
 
     def test_read_nonexistent_file(self):
         '''Test reading a non-existent file.'''
-        result = server.read_file('nonexistent/file.md')
-        assert 'error' in result
-        assert result['success'] is False
+        with pytest.raises(ToolError):
+            server.read_file('nonexistent/file.md')
 
     def test_read_file_path_traversal(self):
         '''Test that path traversal is prevented.'''
-        result = server.read_file('../../../etc/passwd')
-        assert 'error' in result
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.read_file('../../../etc/passwd')
 
     def test_write_new_file(self, vault_path):
         '''Test writing a new file.'''
@@ -56,9 +56,8 @@ class TestFileTools:
 
     def test_write_file_path_traversal(self):
         '''Test that path traversal is prevented in write.'''
-        result = server.write_file('../../../tmp/evil.txt', 'evil content')
-        assert 'error' in result
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.write_file('../../../tmp/evil.txt', 'evil content')
 
 
 class TestDateTools:
@@ -123,17 +122,13 @@ class TestJournalTools:
 
     def test_list_journal_entries_invalid_year(self):
         '''Test listing journal entries with invalid year.'''
-        result = server.list_journal_entries_by_year_and_month('25', '01')
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert 'error' in result[0]
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.list_journal_entries_by_year_and_month('25', '01')
 
     def test_list_journal_entries_invalid_month(self):
         '''Test listing journal entries with invalid month.'''
-        result = server.list_journal_entries_by_year_and_month('2025', '13')
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert 'error' in result[0]
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.list_journal_entries_by_year_and_month('2025', '13')
 
 
 class TestProjectTools:
@@ -161,17 +156,13 @@ class TestProjectTools:
 
     def test_list_project_content_nonexistent(self):
         '''Test listing content of non-existent project.'''
-        result = server.list_project_content('nonexistent-project')
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert 'error' in result[0]
+        with pytest.raises(ToolError):
+            server.list_project_content('nonexistent-project')
 
     def test_list_project_content_invalid_name(self):
         '''Test listing project content with invalid name.'''
-        result = server.list_project_content('../etc')
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert 'error' in result[0]
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.list_project_content('../etc')
 
     def test_create_project(self, vault_path):
         '''Test creating a project.'''
@@ -184,9 +175,8 @@ class TestProjectTools:
 
     def test_create_project_invalid_name(self):
         '''Test creating project with invalid name.'''
-        result = server.create_project('invalid/name')
-        assert 'error' in result
-        assert result['success'] is False
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.create_project('invalid/name')
 
 
 class TestWikiTools:
@@ -231,9 +221,8 @@ class TestJournalEntryTools:
 
     @pytest.mark.parametrize('bad', ['2025-1-15', '2025-02-30', 'yesterday', '', '../2025-01-15'])
     def test_read_journal_entry_rejects_bad_dates(self, bad):
-        result = server.read_journal_entry(bad)
-        assert result['success'] is False
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.read_journal_entry(bad)
 
     def test_append_to_journal_entry_is_exact(self, vault_path):
         result = server.append_to_journal_entry('  remember the milk  ')
@@ -309,9 +298,8 @@ class TestJournalEntryTools:
     @pytest.mark.parametrize('bad', ['', '   ', '\n\n', 'no heading', '#### Section first', '## Topic',
                                      '# Topic', '###Topic', 'text\n### Topic later'])
     def test_add_note_rejects_notes_without_a_leading_h3(self, bad, vault_path):
-        result = server.add_note_to_journal_entry(bad)
-        assert result['success'] is False
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.add_note_to_journal_entry(bad)
         assert list((vault_path / 'journal').rglob('*.md')) == [vault_path / 'journal/2025/01/2025-01-15.md']
 
     @pytest.mark.parametrize('note', ['### Topic', '### Topic\n\n#### Section', '### Topic\n# Top level later'])
@@ -322,9 +310,8 @@ class TestJournalEntryTools:
 
     @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry', 'write_journal_entry'])
     def test_journal_edit_tools_reject_empty_text(self, tool):
-        result = getattr(server, tool)('')
-        assert result['success'] is False
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            getattr(server, tool)('')
 
     @pytest.mark.parametrize('tool', ['append_to_journal_entry', 'prepend_to_journal_entry'])
     def test_append_and_prepend_accept_whitespace_only_text(self, tool, vault_path):
@@ -336,9 +323,8 @@ class TestJournalEntryTools:
                                       'write_journal_entry', 'add_note_to_journal_entry'])
     @pytest.mark.parametrize('bad', ['2025-1-15', '2025-02-30', 'yesterday', '../2025-01-15'])
     def test_journal_edit_tools_reject_bad_dates(self, tool, bad, vault_path):
-        result = getattr(server, tool)('### Entry', date=bad)
-        assert result['success'] is False
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            getattr(server, tool)('### Entry', date=bad)
 
     def test_server_instructions_describe_notes(self):
         instructions = server.mcp.instructions
@@ -361,9 +347,14 @@ class TestErrorsHideVaultPath:
         yield entry
         os.chmod(entry, stat.S_IREAD | stat.S_IWRITE)
 
-    def _assert_hidden(self, result, vault_path):
-        assert result['success'] is False
-        text = repr(result).lower()
+    def _error(self, call):
+        '''the message of the tool error a call raises'''
+        with pytest.raises(ToolError) as raised:
+            call()
+        return str(raised.value)
+
+    def _assert_hidden(self, error, vault_path):
+        text = repr(error).lower()
         root = str(vault_path)
         for form in {root, root.replace('\\', '/'), root.replace('\\', '\\\\')}:
             assert form.lower() not in text
@@ -376,19 +367,19 @@ class TestErrorsHideVaultPath:
         lambda: server.write_file('journal/2025/01/2025-01-15.md', 'x'),
     ])
     def test_write_failures_name_only_the_relative_path(self, call, locked_entry, vault_path):
-        result = call()
-        self._assert_hidden(result, vault_path)
-        assert 'journal/2025/01/2025-01-15.md' in result['error']
+        error = self._error(call)
+        self._assert_hidden(error, vault_path)
+        assert 'journal/2025/01/2025-01-15.md' in error
 
     def test_missing_vault_is_not_named(self, vault_path):
         server._client = VaultClient(str(vault_path / 'gone'))
-        result = server.read_journal_entry('2025-01-15')
-        self._assert_hidden(result, vault_path)
-        assert result['error'] == 'Vault directory does not exist'
+        error = self._error(lambda: server.read_journal_entry('2025-01-15'))
+        self._assert_hidden(error, vault_path)
+        assert error == 'Vault directory does not exist'
 
     def test_path_outside_the_vault_is_reported_as_given(self, vault_path):
-        result = server.read_file('../outside.md')
-        self._assert_hidden(result, vault_path)
+        error = self._error(lambda: server.read_file('../outside.md'))
+        self._assert_hidden(error, vault_path)
 
     def test_redact_catches_every_form_of_the_vault_path(self, vault_path):
         root = str(vault_path)
@@ -400,9 +391,9 @@ class TestErrorsHideVaultPath:
         def boom(self, year, month):
             raise RuntimeError(f'could not list {vault_path}/journal')
         monkeypatch.setattr(VaultClient, 'list_journal_entries', boom)
-        result = server.list_journal_entries_by_year_and_month('2025', '01')[0]
-        self._assert_hidden(result, vault_path)
-        assert '<vault>/journal' in result['error']
+        error = self._error(lambda: server.list_journal_entries_by_year_and_month('2025', '01'))
+        self._assert_hidden(error, vault_path)
+        assert '<vault>/journal' in error
 
 
 class TestFileToolsStayInTheVault:
@@ -441,11 +432,10 @@ class TestFileToolsStayInTheVault:
 
     def test_escape_attempts_are_refused(self, vault_path, outside):
         for path in self._attempts(vault_path, outside):
-            read = server.read_file(path)
-            write = server.write_file(path, 'OVERWRITTEN')
-            assert read['success'] is False, path
-            assert write['success'] is False, path
-            assert 'Invalid input' in read['error'] and 'Invalid input' in write['error'], path
+            with pytest.raises(ToolError, match='Invalid input'):
+                server.read_file(path)
+            with pytest.raises(ToolError, match='Invalid input'):
+                server.write_file(path, 'OVERWRITTEN')
         # nothing new was written inside the vault either
         assert list((vault_path / 'projects').rglob('*')) == [vault_path / 'projects' / 'p']
 
@@ -466,9 +456,10 @@ class TestFileToolsStayInTheVault:
         link = vault_path / 'projects' / 'p' / 'link'
         self._link_or_skip(link, outside.parent)
         for path in ('projects/p/link/secret.md', 'projects/p/link/new.md'):
-            read = server.read_file(path)
-            write = server.write_file(path, 'OVERWRITTEN')
-            assert 'outside vault' in read['error'] and 'outside vault' in write['error'], path
+            with pytest.raises(ToolError, match='outside vault'):
+                server.read_file(path)
+            with pytest.raises(ToolError, match='outside vault'):
+                server.write_file(path, 'OVERWRITTEN')
         assert not (outside.parent / 'new.md').exists()
 
     def test_backslash_paths_work_on_every_platform(self, vault_path):
