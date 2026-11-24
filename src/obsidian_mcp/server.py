@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field, ValidationError
 
@@ -27,7 +28,6 @@ from obsidian_mcp.schema import (
     JournalWriteInput,
     ProjectInput,
     YearMonthInput,
-    create_error_response,
     create_success_response,
 )
 from obsidian_mcp.vault_client import VaultClient, VaultError
@@ -85,14 +85,21 @@ def redact_vault_path(message: str) -> str:
     return message
 
 
-def error_response(message: str) -> Dict[str, Any]:
-    '''An error response, with the vault's location removed.'''
-    return create_error_response(redact_vault_path(message))
+def tool_error(message: str) -> ToolError:
+    '''
+    A tool error to raise, so the client sees the call failed, with the vault's location removed.
+    '''
+    return ToolError(redact_vault_path(message))
 
 
-def format_error(error: Exception) -> Dict[str, Any]:
-    '''Format an exception as an error response.'''
-    return error_response(str(error))
+def invalid_input(error: ValidationError) -> str:
+    '''A short message for a validation error: each problem and its argument, without pydantic's links.'''
+    problems = []
+    for item in error.errors():
+        field = '.'.join(str(part) for part in item['loc'])
+        message = item['msg'].removeprefix('Value error, ')
+        problems.append(f'{field}: {message}' if field else message)
+    return 'Invalid input: ' + '; '.join(problems)
 
 
 # guidance sent to clients as the server instructions: the journal format, then projects and the wiki
@@ -165,7 +172,7 @@ mcp = FastMCP('Obsidian MCP', instructions=JOURNAL_FORMAT)
 
 # journal tools
 
-@mcp.tool(annotations=ADDS)
+@mcp.tool(title="Add a journal note", annotations=ADDS)
 def add_note_to_journal_entry(
     text: Annotated[str, Field(
         description='the note, starting with a ### heading, laid out as the description shows'
@@ -210,16 +217,16 @@ def add_note_to_journal_entry(
 
     except ValidationError as e:
         logger.error(f'validation error adding note to journal: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error adding note to journal: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error adding note to journal: {e}')
-        return error_response(f'Unexpected error adding note to journal: {e}')
+        raise tool_error(f'Unexpected error adding note to journal: {e}')
 
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="Read a journal entry", annotations=READ_ONLY)
 def read_journal_entry(date: EntryDate) -> Dict[str, Any]:
     '''
     Read the journal entry for a specific date.
@@ -236,16 +243,16 @@ def read_journal_entry(date: EntryDate) -> Dict[str, Any]:
 
     except ValidationError as e:
         logger.error(f'validation error reading journal entry: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error reading journal entry: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error reading journal entry: {e}')
-        return error_response(f'Unexpected error reading journal entry: {e}')
+        raise tool_error(f'Unexpected error reading journal entry: {e}')
 
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="Search the journal", annotations=READ_ONLY)
 def search_journal(
     query: Annotated[str, Field(
         description="words to find, e.g. 'dentist insurance' or '\"river trail\" run'"
@@ -294,16 +301,16 @@ def search_journal(
 
     except ValidationError as e:
         logger.error(f'validation error searching journal: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error searching journal: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error searching journal: {e}')
-        return error_response(f'Unexpected error searching journal: {e}')
+        raise tool_error(f'Unexpected error searching journal: {e}')
 
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="Get today's date", annotations=READ_ONLY)
 def get_todays_date() -> Dict[str, Any]:
     '''
     Get today's date and the current time in the user's timezone (TZ).
@@ -335,10 +342,10 @@ def get_todays_date() -> Dict[str, Any]:
         return result
     except Exception as e:
         logger.exception(f"unexpected error getting today's date: {e}")
-        return error_response(f"Unexpected error getting today's date: {e}")
+        raise tool_error(f"Unexpected error getting today's date: {e}")
 
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="List journal entries for a month", annotations=READ_ONLY)
 def list_journal_entries_by_year_and_month(
     year: Annotated[str, Field(description='the year, as YYYY, e.g. "2025"')],
     month: Annotated[str, Field(
@@ -361,16 +368,16 @@ def list_journal_entries_by_year_and_month(
 
     except ValidationError as e:
         logger.error(f'validation error listing journal entries: {e}')
-        return [error_response(f'Invalid input: {e}')]
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error listing journal entries: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing journal entries: {e}')
-        return [error_response(f'Unexpected error listing journal entries: {e}')]
+        raise tool_error(f'Unexpected error listing journal entries: {e}')
 
 
-@mcp.tool(annotations=ADDS)
+@mcp.tool(title="Prepend to a journal entry", annotations=ADDS)
 def prepend_to_journal_entry(
     text: Annotated[str, Field(
         description='the text, written exactly as given; end it with a blank line'
@@ -398,16 +405,16 @@ def prepend_to_journal_entry(
 
     except ValidationError as e:
         logger.error(f'validation error prepending to journal: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error prepending to journal: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error prepending to journal: {e}')
-        return error_response(f'Unexpected error prepending to journal: {e}')
+        raise tool_error(f'Unexpected error prepending to journal: {e}')
 
 
-@mcp.tool(annotations=ADDS)
+@mcp.tool(title="Append to a journal entry", annotations=ADDS)
 def append_to_journal_entry(
     text: Annotated[str, Field(
         description='the text, written exactly as given; include the newlines you need'
@@ -434,16 +441,16 @@ def append_to_journal_entry(
 
     except ValidationError as e:
         logger.error(f'validation error appending to journal: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error appending to journal: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error appending to journal: {e}')
-        return error_response(f'Unexpected error appending to journal: {e}')
+        raise tool_error(f'Unexpected error appending to journal: {e}')
 
 
-@mcp.tool(annotations=REPLACES)
+@mcp.tool(title="Replace a journal entry", annotations=REPLACES)
 def write_journal_entry(
     content: Annotated[str, Field(
         description="the whole file, everything you aren't changing included"
@@ -470,18 +477,18 @@ def write_journal_entry(
 
     except ValidationError as e:
         logger.error(f'validation error writing journal entry: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error writing journal entry: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error writing journal entry: {e}')
-        return error_response(f'Unexpected error writing journal entry: {e}')
+        raise tool_error(f'Unexpected error writing journal entry: {e}')
 
 
 # project tools
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="List projects", annotations=READ_ONLY)
 def list_projects() -> List[Dict[str, str]]:
     '''
     List all projects (subdirectories in the projects directory).
@@ -498,13 +505,13 @@ def list_projects() -> List[Dict[str, str]]:
             return vault.list_projects()
     except VaultError as e:
         logger.error(f'vault error listing projects: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing projects: {e}')
-        return [error_response(f'Unexpected error listing projects: {e}')]
+        raise tool_error(f'Unexpected error listing projects: {e}')
 
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="List a project's files", annotations=READ_ONLY)
 def list_project_content(
     project: Annotated[str, Field(description='the project name, from list_projects')],
 ) -> List[Dict[str, str]]:
@@ -522,16 +529,16 @@ def list_project_content(
 
     except ValidationError as e:
         logger.error(f'validation error listing project content: {e}')
-        return [error_response(f'Invalid input: {e}')]
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error listing project content: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing project content: {e}')
-        return [error_response(f'Unexpected error listing project content: {e}')]
+        raise tool_error(f'Unexpected error listing project content: {e}')
 
 
-@mcp.tool(annotations=ADDS)
+@mcp.tool(title="Create a project", annotations=ADDS)
 def create_project(
     project: Annotated[str, Field(
         description='the new project name, lowercase words with spaces'
@@ -552,18 +559,18 @@ def create_project(
 
     except ValidationError as e:
         logger.error(f'validation error creating project: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error creating project: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error creating project: {e}')
-        return error_response(f'Unexpected error creating project: {e}')
+        raise tool_error(f'Unexpected error creating project: {e}')
 
 
 # wiki tools
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="List wiki articles", annotations=READ_ONLY)
 def list_wiki() -> List[Dict[str, str]]:
     '''
     List all wiki articles in the obsidian wiki.
@@ -580,15 +587,15 @@ def list_wiki() -> List[Dict[str, str]]:
             return vault.list_wiki()
     except VaultError as e:
         logger.error(f'vault error listing wiki: {e}')
-        return [format_error(e)]
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error listing wiki: {e}')
-        return [error_response(f'Unexpected error listing wiki: {e}')]
+        raise tool_error(f'Unexpected error listing wiki: {e}')
 
 
 # file tools
 
-@mcp.tool(annotations=READ_ONLY)
+@mcp.tool(title="Read a vault file", annotations=READ_ONLY)
 def read_file(
     file_path: Annotated[str, Field(
         description='the vault-relative path, from list_project_content or list_wiki'
@@ -609,16 +616,16 @@ def read_file(
 
     except ValidationError as e:
         logger.error(f'validation error reading file: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error reading file: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error reading file: {e}')
-        return error_response(f'Unexpected error reading file: {e}')
+        raise tool_error(f'Unexpected error reading file: {e}')
 
 
-@mcp.tool(annotations=REPLACES)
+@mcp.tool(title="Write a vault file", annotations=REPLACES)
 def write_file(
     file_path: Annotated[str, Field(
         description='the vault-relative path; read the file first if it exists'
@@ -643,13 +650,13 @@ def write_file(
 
     except ValidationError as e:
         logger.error(f'validation error writing file: {e}')
-        return error_response(f'Invalid input: {e}')
+        raise tool_error(invalid_input(e))
     except VaultError as e:
         logger.error(f'vault error writing file: {e}')
-        return format_error(e)
+        raise tool_error(str(e))
     except Exception as e:
         logger.exception(f'unexpected error writing file: {e}')
-        return error_response(f'Unexpected error writing file: {e}')
+        raise tool_error(f'Unexpected error writing file: {e}')
 
 
 # entry point

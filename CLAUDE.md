@@ -66,7 +66,7 @@ Fourteen core MCP tools (see README.md for full documentation):
 
 Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: `###` notes (`####` / `#####` within) appended through the day, with sections such as a recap prepended above them. It ends with a short section on projects and the wiki (which paths `read_file` / `write_file` take, and that documenting something means the journal plus a project file).
 
-What clients see about each tool is set in server.py, not left to a gateway: tools are defined in the order they are listed (usual ones first, `add_note_to_journal_entry` at the top); every tool has `ToolAnnotations` (`READ_ONLY`, `ADDS` = not destructive, `REPLACES` = destructive, all `openWorldHint=False`); every argument is `Annotated[..., Field(description=...)]`, so docstrings carry no `Args:` block. `test_tool_metadata.py` enforces all three. Docstrings say what a tool returns in a closing sentence ("Returns a dictionary with ..."), not a `Returns:` section, and give examples after "For example:", not an `Example:` section: fastmcp 4 strips those sections from tool descriptions. Every journal write uses `newline=''` so files stay LF on Windows.
+What clients see about each tool is set in server.py, not left to a gateway: tools are defined in the order they are listed (usual ones first, `add_note_to_journal_entry` at the top); every tool has a `title` and `ToolAnnotations` (`READ_ONLY`, `ADDS` = not destructive, `REPLACES` = destructive, all `openWorldHint=False`); every argument is `Annotated[..., Field(description=...)]`, so docstrings carry no `Args:` block. `test_tool_metadata.py` enforces all three. Docstrings say what a tool returns in a closing sentence ("Returns a dictionary with ..."), not a `Returns:` section, and give examples after "For example:", not an `Example:` section: fastmcp 4 strips those sections from tool descriptions. Every journal write uses `newline=''` so files stay LF on Windows.
 
 ## Implementation Notes
 
@@ -87,7 +87,7 @@ What clients see about each tool is set in server.py, not left to a gateway: too
 - `FilePathInput` - File path validation with traversal protection
 - `FileWriteInput` - File write input validation
 - `ProjectInput` - Project name validation
-- `create_error_response()` / `create_success_response()` - Response helpers
+- `create_success_response()` - Response helper
 
 #### vault_client.py (Vault Operations)
 - `VaultClient` - Context manager for all vault operations
@@ -107,10 +107,10 @@ What clients see about each tool is set in server.py, not left to a gateway: too
 
 ### Code Quality Features
 - Type hints throughout
-- Consistent error handling patterns: `{"error": "message", "success": False}`
+- Errors are raised, not returned: every tool failure is `raise tool_error(message)`, a `ToolError`, so clients get `isError: true`. Validation failures use `invalid_input(e)`, a short "Invalid input: <argument>: <problem>" message without pydantic's detail
 - Structured logging with configurable levels (all lowercase except proper names)
 - Path security validation, identical on macOS and Windows (the vault syncs between them). `validate_vault_path` in schema.py checks the text: `\` counts as `/`, no absolute, rooted, UNC or drive paths, no `..`/`.`/empty parts, and every name must be portable (`check_name`: no `< > : " | ? *` or control characters, which also rules out drive letters and NTFS streams; no reserved device names like `nul.md`; no trailing dot or space). `VaultClient._validate_path` runs that check for every caller, then resolves the path (following symlinks and junctions) and refuses anything outside the vault
-- Responses never reveal where the vault lives: errors name vault-relative paths and an OSError's reason (`strerror`), not its text, and every server error goes through `error_response`, which redacts the vault root as a backstop. Full detail goes to the log only
+- Responses never reveal where the vault lives: errors name vault-relative paths and an OSError's reason (`strerror`), not its text, and every server error goes through `tool_error`, which redacts the vault root as a backstop. Full detail goes to the log only
 - Context manager pattern for resource management
 
 ### Entry Point Flow
@@ -146,7 +146,7 @@ run()
 - Comments in lowercase (except proper names/symbols)
 - Docstrings use triple single quotes: `''' like this '''`
 - Lowercase log messages except proper names
-- Consistent error responses: `{"error": "message", "success": False}`
+- Tool failures raise `tool_error(...)`; never return an error dict
 - Files end with blank line
 - Single quotes for strings
 

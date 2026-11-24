@@ -10,7 +10,6 @@ from obsidian_mcp.schema import (
     FilePathInput,
     FileWriteInput,
     ProjectInput,
-    create_error_response,
     validate_vault_path,
     create_success_response,
 )
@@ -146,11 +145,6 @@ class TestProjectInput:
 
 class TestResponseHelpers:
     '''Test response helper functions.'''
-
-    def test_create_error_response(self):
-        '''Test creating error responses.'''
-        error = create_error_response('Test error message')
-        assert error == {'error': 'Test error message', 'success': False}
 
     def test_create_success_response(self):
         '''Test creating success responses.'''

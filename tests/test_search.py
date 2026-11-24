@@ -5,6 +5,7 @@ Tests for journal search: note splitting, matching, date ranges and the tool.
 import pytest
 from pydantic import ValidationError
 
+from mcp.server.fastmcp.exceptions import ToolError
 from obsidian_mcp import server
 from obsidian_mcp.schema import JournalSearchInput, parse_search_terms
 from obsidian_mcp.vault_client import VaultClient, split_journal_notes
@@ -260,9 +261,8 @@ class TestSearchTool:
         assert [r['date'] for r in result['results']] == ['2026-03-01']
 
     def test_invalid_input(self, tool_client):
-        result = server.search_journal('run', max_results=500)
-        assert result['success'] is False
-        assert 'Invalid input' in result['error']
+        with pytest.raises(ToolError, match='Invalid input'):
+            server.search_journal('run', max_results=500)
 
     def test_instructions_mention_search(self):
         assert 'search_journal' in server.mcp.instructions
