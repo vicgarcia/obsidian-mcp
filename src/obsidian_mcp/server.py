@@ -147,8 +147,6 @@ projects and the wiki:
 - projects are folders of notes for ongoing work. list_project_content gives the paths
   that read_file and write_file take.
 - the wiki is a set of standalone articles. list_wiki gives the paths that read_file takes.
-- when the user asks for something to be documented, add it to the journal and to a
-  project file, reading an existing file first.
 '''
 
 # tool annotations: whether a tool only reads, and whether a write can overwrite or remove
