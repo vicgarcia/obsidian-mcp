@@ -64,7 +64,7 @@ Fourteen core MCP tools (see README.md for full documentation):
 - `list_projects` / `list_project_content` / `create_project` - Project management
 - `list_wiki` - List wiki articles
 
-Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: `###` notes (`####` / `#####` within) appended through the day, with sections such as a recap prepended above them. It ends with a short section on projects and the wiki (which paths `read_file` / `write_file` take, and that documenting something means the journal plus a project file).
+Journal format guidance lives in `JOURNAL_FORMAT` in server.py, which is passed as the FastMCP server `instructions`: `###` notes (`####` / `#####` within) appended through the day, with sections such as a recap prepended above them. It ends with a short section on projects and the wiki (which paths `read_file` / `write_file` take).
 
 What clients see about each tool is set in server.py, not left to a gateway: tools are defined in the order they are listed (usual ones first, `add_note_to_journal_entry` at the top); every tool has a `title` and `ToolAnnotations` (`READ_ONLY`, `ADDS` = not destructive, `REPLACES` = destructive, all `openWorldHint=False`); every argument is `Annotated[..., Field(description=...)]`, so docstrings carry no `Args:` block. `test_tool_metadata.py` enforces all three. Docstrings say what a tool returns in a closing sentence ("Returns a dictionary with ..."), not a `Returns:` section, and give examples after "For example:", not an `Example:` section: fastmcp 4 strips those sections from tool descriptions. Every journal write uses `newline=''` so files stay LF on Windows.
 
